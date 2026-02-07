@@ -1,0 +1,50 @@
+server:
+  port: 8080
+  shutdown: graceful
+
+spring:
+  application:
+    name: log-analyzer
+    
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 50MB
+      
+  cache:
+    type: caffeine
+    caffeine:
+      spec: maximumSize=10000,expireAfterWrite=1h
+
+# ipinfo API
+ipinfo:
+  base-url: https://ipinfo.io
+  token: ${IPINFO_TOKEN:eac7f9bfec8ddb}
+
+# 로그 분석 설정
+log-analysis:
+  max-file-lines: 200000
+  max-file-size-mb: 50
+  top-n-results: 10
+
+# 로깅
+logging:
+  level:
+    root: INFO
+    com.electricip: DEBUG
+  pattern:
+    console: "%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+
+# Actuator
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+
+# Swagger
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
