@@ -103,7 +103,17 @@ public class GlobalExceptionHandler {
             String message,
             String path
     ) {
-        public static ErrorResponse of(HttpStatus httpStatus, String errorCode, 
+        /**
+         * Compact Constructor: 필수 필드 검증 + message null 치환
+         */
+        public ErrorResponse {
+            java.util.Objects.requireNonNull(timestamp, "timestamp는 null일 수 없습니다");
+            java.util.Objects.requireNonNull(errorCode, "errorCode는 null일 수 없습니다");
+            java.util.Objects.requireNonNull(path, "path는 null일 수 없습니다");
+            message = (message != null) ? message : "알 수 없는 오류";
+        }
+
+        public static ErrorResponse of(HttpStatus httpStatus, String errorCode,
                                       String message, String path) {
             return new ErrorResponse(
                     LocalDateTime.now(),
