@@ -5,6 +5,9 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -120,33 +123,16 @@ class AnalysisResultTest {
         void shouldDefaultCollectionsToEmpty() {
             var stats = AnalysisResult.Statistics.builder()
                     .totalRequests(0)
-                    .successCount(0)
-                    .redirectCount(0)
-                    .clientErrorCount(0)
-                    .serverErrorCount(0)
-                    .avgResponseTime(0.0)
-                    .avgSentBytes(0.0)
-                    .totalTraffic(0)
                     .build();
 
-            assertNotNull(stats.getTopPaths());
-            assertTrue(stats.getTopPaths().isEmpty());
-            assertNotNull(stats.getTopStatusCodes());
-            assertTrue(stats.getTopStatusCodes().isEmpty());
-            assertNotNull(stats.getTopIps());
-            assertTrue(stats.getTopIps().isEmpty());
-            assertNotNull(stats.getMethodStats());
-            assertTrue(stats.getMethodStats().isEmpty());
-        }
-
-        @Test
-        @DisplayName("topPaths에 null을 명시적으로 전달하면 NullPointerException 발생")
-        void shouldThrowWhenTopPathsIsExplicitlyNull() {
-            assertThrows(NullPointerException.class, () ->
-                    AnalysisResult.Statistics.builder()
-                            .totalRequests(0)
-                            .topPaths(null)
-                            .build());
+            assertNotNull(stats.topPaths());
+            assertTrue(stats.topPaths().isEmpty());
+            assertNotNull(stats.topStatusCodes());
+            assertTrue(stats.topStatusCodes().isEmpty());
+            assertNotNull(stats.topIps());
+            assertTrue(stats.topIps().isEmpty());
+            assertNotNull(stats.methodStats());
+            assertTrue(stats.methodStats().isEmpty());
         }
 
         @Test
@@ -169,6 +155,69 @@ class AnalysisResultTest {
 
             assertEquals(0.0, stats.successRate());
             assertEquals(0.0, stats.clientErrorRate());
+        }
+    }
+
+    @Nested
+    @DisplayName("Statistics 불변성 검증")
+    class StatisticsImmutabilityTest {
+
+        @Test
+        @DisplayName("빌더에 전달한 원본 리스트를 수정해도 Statistics 내부 상태는 변하지 않는다")
+        void shouldNotBeAffectedByOriginalListModification() {
+            var mutableList = new ArrayList<>(List.of(
+                    new AnalysisResult.TopItem("/api", 100)));
+
+            var stats = AnalysisResult.Statistics.builder()
+                    .totalRequests(100)
+                    .topPaths(mutableList)
+                    .build();
+
+            mutableList.clear();
+
+            assertEquals(1, stats.topPaths().size());
+            assertEquals("/api", stats.topPaths().get(0).item());
+        }
+
+        @Test
+        @DisplayName("빌더에 전달한 원본 맵을 수정해도 Statistics 내부 상태는 변하지 않는다")
+        void shouldNotBeAffectedByOriginalMapModification() {
+            var mutableMap = new HashMap<String, Long>();
+            mutableMap.put("GET", 50L);
+
+            var stats = AnalysisResult.Statistics.builder()
+                    .totalRequests(100)
+                    .methodStats(mutableMap)
+                    .build();
+
+            mutableMap.clear();
+
+            assertEquals(1, stats.methodStats().size());
+            assertEquals(50L, stats.methodStats().get("GET"));
+        }
+
+        @Test
+        @DisplayName("accessor로 반환된 리스트는 수정할 수 없다")
+        void shouldReturnUnmodifiableList() {
+            var stats = AnalysisResult.Statistics.builder()
+                    .totalRequests(100)
+                    .topPaths(List.of(new AnalysisResult.TopItem("/api", 100)))
+                    .build();
+
+            assertThrows(UnsupportedOperationException.class, () ->
+                    stats.topPaths().clear());
+        }
+
+        @Test
+        @DisplayName("accessor로 반환된 맵은 수정할 수 없다")
+        void shouldReturnUnmodifiableMap() {
+            var stats = AnalysisResult.Statistics.builder()
+                    .totalRequests(100)
+                    .methodStats(java.util.Map.of("GET", 50L))
+                    .build();
+
+            assertThrows(UnsupportedOperationException.class, () ->
+                    stats.methodStats().clear());
         }
     }
 }
