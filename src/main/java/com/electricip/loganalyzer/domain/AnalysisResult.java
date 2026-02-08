@@ -3,7 +3,6 @@ package com.electricip.loganalyzer.domain;
 import lombok.*;
 
 import java.time.LocalDateTime;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -21,7 +20,7 @@ public class AnalysisResult {
     @Singular("ipDetail")
     Map<String, IpInfo> ipDetails;
 
-    ParseErrors parseErrors;
+    ParseStatistics parseStatistics;
 
     /**
      * 명시적 생성자
@@ -32,7 +31,7 @@ public class AnalysisResult {
             Long processingTimeMs,
             @NonNull Statistics statistics,
             Map<String, IpInfo> ipDetails,
-            ParseErrors parseErrors
+            ParseStatistics parseStatistics
     ) {
         this.analysisId = analysisId;
         this.completedAt = completedAt;
@@ -42,7 +41,7 @@ public class AnalysisResult {
         this.ipDetails = (ipDetails == null) ? Map.of() : Map.copyOf(ipDetails);
 
         // 기본값 보장
-        this.parseErrors = (parseErrors == null) ? ParseErrors.empty() : parseErrors;
+        this.parseStatistics = (parseStatistics == null) ? ParseStatistics.empty() : parseStatistics;
     }
 
 
@@ -113,20 +112,4 @@ public class AnalysisResult {
         }
     }
 
-    /**
-     * 파싱 오류 (Record)
-     */
-    public record ParseErrors(int errorCount, List<String> errorSamples) {
-        public static ParseErrors empty() {
-            return new ParseErrors(0, Collections.emptyList());
-        }
-
-        public ParseErrors {
-            errorSamples = List.copyOf(errorSamples);
-        }
-
-        public List<String> errorSamples() {
-            return errorSamples; // 이미 불변
-        }
-    }
 }
