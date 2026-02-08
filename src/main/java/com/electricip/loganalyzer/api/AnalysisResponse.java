@@ -1,6 +1,8 @@
 package com.electricip.loganalyzer.api;
 
 import com.electricip.loganalyzer.domain.AnalysisResult;
+import com.electricip.loganalyzer.domain.ParseError;
+import com.electricip.loganalyzer.domain.ParseStatistics;
 import lombok.Builder;
 import lombok.NonNull;
 
@@ -21,7 +23,7 @@ public record AnalysisResponse(
         @NonNull BasicStats basicStats,
         @NonNull TopStats topStats,
         @NonNull List<IpDetail> ipDetails,
-        @NonNull ParseErrors parseErrors,
+        @NonNull ParseStatisticsDto parseStatistics,
         @NonNull AdditionalStats additionalStats
 ) {
 
@@ -56,15 +58,30 @@ public record AnalysisResponse(
                         convertTopItemsForStatusCodes(stats.topStatusCodes()),
                         convertTopItemsForIps(stats.topIps())))
                 .ipDetails(convertIpDetails(result.getIpDetails()))
-                .parseErrors(new ParseErrors(
-                        result.getParseErrors().errorCount(),
-                        result.getParseErrors().errorSamples()))
+                .parseStatistics(convertParseStatistics(result.getParseStatistics()))
                 .additionalStats(new AdditionalStats(
                         stats.methodStats(),
                         stats.avgResponseTime(),
                         stats.avgSentBytes(),
                         stats.totalTraffic()))
                 .build();
+    }
+
+    private static ParseStatisticsDto convertParseStatistics(ParseStatistics ps) {
+        var errorDtos = ps.errorSamples().stream()
+                .map(e -> new ParseErrorDto(
+                        e.lineNumber(),
+                        e.errorMessage(),
+                        e.errorType().name(),
+                        e.occurredAt()))
+                .toList();
+
+        return new ParseStatisticsDto(
+                ps.totalLines(),
+                ps.successCount(),
+                ps.errorCount(),
+                ps.errorsByType(),
+                errorDtos);
     }
 
     private static List<PathStat> convertTopItems(List<AnalysisResult.TopItem> items) {
@@ -144,13 +161,24 @@ public record AnalysisResponse(
             String city,
             String organization) {}
 
-    public record ParseErrors(
-            int errorCount,
-            List<String> errorSamples) {
-        public ParseErrors {
-            errorSamples = List.copyOf(errorSamples);
+    public record ParseStatisticsDto(
+            long totalLines,
+            long successCount,
+            long errorCount,
+            Map<String, Integer> errorsByType,
+            List<ParseErrorDto> errorSamples) {
+
+        public ParseStatisticsDto {
+            errorsByType = (errorsByType != null) ? Map.copyOf(errorsByType) : Map.of();
+            errorSamples = (errorSamples != null) ? List.copyOf(errorSamples) : List.of();
         }
     }
+
+    public record ParseErrorDto(
+            long lineNumber,
+            String errorMessage,
+            String errorType,
+            LocalDateTime occurredAt) {}
 
     public record AdditionalStats(
             Map<String, Long> methodStats,
