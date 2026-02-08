@@ -20,8 +20,8 @@ class AnalysisResponseTest {
                 Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
     }
 
-    private static AnalysisResponse.ParseErrors validParseErrors() {
-        return new AnalysisResponse.ParseErrors(0, Collections.emptyList());
+    private static AnalysisResponse.ParseStatisticsDto validParseStatistics() {
+        return new AnalysisResponse.ParseStatisticsDto(0, 0, 0, Map.of(), Collections.emptyList());
     }
 
     private static AnalysisResponse.AdditionalStats validAdditionalStats() {
@@ -37,7 +37,7 @@ class AnalysisResponseTest {
                 .basicStats(validBasicStats())
                 .topStats(validTopStats())
                 .ipDetails(Collections.emptyList())
-                .parseErrors(validParseErrors())
+                .parseStatistics(validParseStatistics())
                 .additionalStats(validAdditionalStats())
                 .build();
 
@@ -55,7 +55,7 @@ class AnalysisResponseTest {
                         .basicStats(validBasicStats())
                         .topStats(validTopStats())
                         .ipDetails(Collections.emptyList())
-                        .parseErrors(validParseErrors())
+                        .parseStatistics(validParseStatistics())
                         .additionalStats(validAdditionalStats())
                         .build());
     }
@@ -69,7 +69,7 @@ class AnalysisResponseTest {
                         .basicStats(validBasicStats())
                         .topStats(validTopStats())
                         .ipDetails(Collections.emptyList())
-                        .parseErrors(validParseErrors())
+                        .parseStatistics(validParseStatistics())
                         .additionalStats(validAdditionalStats())
                         .build());
     }
@@ -83,7 +83,7 @@ class AnalysisResponseTest {
                         .completedAt(LocalDateTime.now())
                         .topStats(validTopStats())
                         .ipDetails(Collections.emptyList())
-                        .parseErrors(validParseErrors())
+                        .parseStatistics(validParseStatistics())
                         .additionalStats(validAdditionalStats())
                         .build());
     }
@@ -97,7 +97,7 @@ class AnalysisResponseTest {
                 .basicStats(validBasicStats())
                 .topStats(validTopStats())
                 .ipDetails(Collections.emptyList())
-                .parseErrors(validParseErrors())
+                .parseStatistics(validParseStatistics())
                 .additionalStats(validAdditionalStats())
                 .build();
 

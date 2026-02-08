@@ -117,17 +117,20 @@ class AnalysisResultTest {
         }
 
         @Test
-        @DisplayName("parseErrors 미설정 시 empty가 기본값")
-        void shouldDefaultParseErrorsToEmpty() {
+        @DisplayName("parseStatistics 미설정 시 empty가 기본값")
+        void shouldDefaultParseStatisticsToEmpty() {
             var result = AnalysisResult.builder()
                     .analysisId("test-id")
                     .completedAt(LocalDateTime.now())
                     .statistics(validStatistics())
                     .build();
 
-            assertThat(result.getParseErrors()).isNotNull();
-            assertThat(result.getParseErrors().errorCount()).isZero();
-            assertThat(result.getParseErrors().errorSamples()).isEmpty();
+            assertThat(result.getParseStatistics()).isNotNull();
+            assertThat(result.getParseStatistics().totalLines()).isZero();
+            assertThat(result.getParseStatistics().successCount()).isZero();
+            assertThat(result.getParseStatistics().errorCount()).isZero();
+            assertThat(result.getParseStatistics().errorsByType()).isEmpty();
+            assertThat(result.getParseStatistics().errorSamples()).isEmpty();
         }
 
         @Test
@@ -383,56 +386,43 @@ class AnalysisResultTest {
     }
 
     @Nested
-    @DisplayName("ParseErrors 검증")
-    class ParseErrorsTest {
+    @DisplayName("ParseStatistics 기본값 검증")
+    class ParseStatisticsDefaultTest {
 
         @Test
-        @DisplayName("empty()는 errorCount 0, 빈 리스트를 반환한다")
-        void shouldCreateEmptyParseErrors() {
-            var errors = AnalysisResult.ParseErrors.empty();
+        @DisplayName("null 전달 시 empty ParseStatistics가 설정된다")
+        void shouldDefaultToEmptyWhenNull() {
+            var result = new AnalysisResult(
+                    "test-id",
+                    LocalDateTime.now(),
+                    null,
+                    validStatistics(),
+                    null,
+                    null
+            );
 
-            assertThat(errors.errorCount()).isZero();
-            assertThat(errors.errorSamples()).isEmpty();
+            assertThat(result.getParseStatistics()).isNotNull();
+            assertThat(result.getParseStatistics().totalLines()).isZero();
+            assertThat(result.getParseStatistics().errorCount()).isZero();
+            assertThat(result.getParseStatistics().errorSamples()).isEmpty();
         }
 
         @Test
-        @DisplayName("정상 값으로 생성된다")
-        void shouldCreateWithValues() {
-            var samples = List.of("error1", "error2");
-            var errors = new AnalysisResult.ParseErrors(2, samples);
+        @DisplayName("ParseStatistics 전달 시 그대로 설정된다")
+        void shouldUseProvidedParseStatistics() {
+            var stats = new ParseStatistics(10, 9, 1, Map.of("PARSING", 1), List.of());
+            var result = new AnalysisResult(
+                    "test-id",
+                    LocalDateTime.now(),
+                    null,
+                    validStatistics(),
+                    null,
+                    stats
+            );
 
-            assertThat(errors.errorCount()).isEqualTo(2);
-            assertThat(errors.errorSamples()).containsExactly("error1", "error2");
-        }
-
-        @Test
-        @DisplayName("errorSamples는 방어적 복사로 불변이다")
-        void shouldDefensivelyCopyErrorSamples() {
-            var mutableList = new ArrayList<>(List.of("error1"));
-            var errors = new AnalysisResult.ParseErrors(1, mutableList);
-
-            mutableList.clear();
-
-            assertThat(errors.errorSamples()).hasSize(1);
-            assertThat(errors.errorSamples().get(0)).isEqualTo("error1");
-        }
-
-        @Test
-        @DisplayName("errorSamples 반환 리스트는 수정할 수 없다")
-        void shouldReturnUnmodifiableErrorSamples() {
-            var errors = new AnalysisResult.ParseErrors(1, List.of("error1"));
-
-            assertThatThrownBy(() -> errors.errorSamples().clear())
-                    .isInstanceOf(UnsupportedOperationException.class);
-        }
-
-        @Test
-        @DisplayName("empty()의 errorSamples도 수정할 수 없다")
-        void shouldReturnUnmodifiableEmptyErrorSamples() {
-            var errors = AnalysisResult.ParseErrors.empty();
-
-            assertThatThrownBy(() -> errors.errorSamples().add("hack"))
-                    .isInstanceOf(UnsupportedOperationException.class);
+            assertThat(result.getParseStatistics().totalLines()).isEqualTo(10);
+            assertThat(result.getParseStatistics().successCount()).isEqualTo(9);
+            assertThat(result.getParseStatistics().errorCount()).isEqualTo(1);
         }
     }
 }
