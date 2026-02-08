@@ -58,7 +58,7 @@ public class AnalysisService {
             var statistics = statisticsCalculator.calculate(logs);
             
             // 3. IP enrichment
-            var ipDetails = enrichIpInfo(statistics.getTopIps());
+            var ipDetails = enrichIpInfo(statistics.topIps());
             
             // 4. 결과 생성
             var result = AnalysisResult.builder()
@@ -78,7 +78,7 @@ public class AnalysisService {
             log.info("분석 완료: id={}, duration={}ms, total={}", 
                     result.getAnalysisId(), 
                     result.getProcessingTimeMs(),
-                    statistics.getTotalRequests());
+                    statistics.totalRequests());
             
             return result;
             

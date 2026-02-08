@@ -1,8 +1,6 @@
 package com.electricip.loganalyzer.domain;
 
-import lombok.Builder;
-import lombok.NonNull;
-import lombok.Value;
+import lombok.*;
 
 import java.time.LocalDateTime;
 import java.util.Collections;
@@ -20,35 +18,61 @@ public class AnalysisResult {
     Long processingTimeMs;
     @NonNull Statistics statistics;
 
-    @Builder.Default
-    Map<String, IpInfo> ipDetails = Collections.emptyMap();
-    @Builder.Default
-    ParseErrors parseErrors = ParseErrors.empty();
+    @Singular("ipDetail")
+    Map<String, IpInfo> ipDetails;
+
+    ParseErrors parseErrors;
+
+    /**
+     * 명시적 생성자
+     */
+    public AnalysisResult(
+            @NonNull String analysisId,
+            @NonNull LocalDateTime completedAt,
+            Long processingTimeMs,
+            @NonNull Statistics statistics,
+            Map<String, IpInfo> ipDetails,
+            ParseErrors parseErrors
+    ) {
+        this.analysisId = analysisId;
+        this.completedAt = completedAt;
+        this.processingTimeMs = processingTimeMs;
+        this.statistics = statistics;
+
+        this.ipDetails = (ipDetails == null) ? Map.of() : Map.copyOf(ipDetails);
+
+        // 기본값 보장
+        this.parseErrors = (parseErrors == null) ? ParseErrors.empty() : parseErrors;
+    }
+
 
     /**
      * 통계 Value Object
      */
-    @Value
     @Builder
-    public static class Statistics {
-        long totalRequests;
-        long successCount;
-        long redirectCount;
-        long clientErrorCount;
-        long serverErrorCount;
-
-        @NonNull @Builder.Default
-        List<TopItem> topPaths = Collections.emptyList();
-        @NonNull @Builder.Default
-        List<TopItem> topStatusCodes = Collections.emptyList();
-        @NonNull @Builder.Default
-        List<TopItem> topIps = Collections.emptyList();
-        @NonNull @Builder.Default
-        Map<String, Long> methodStats = Collections.emptyMap();
-
-        double avgResponseTime;
-        double avgSentBytes;
-        long totalTraffic;
+    public record Statistics(
+            long totalRequests,
+            long successCount,
+            long redirectCount,
+            long clientErrorCount,
+            long serverErrorCount,
+            List<TopItem> topPaths,
+            List<TopItem> topStatusCodes,
+            List<TopItem> topIps,
+            Map<String, Long> methodStats,
+            double avgResponseTime,
+            double avgSentBytes,
+            long totalTraffic
+    ) {
+        /**
+         * Compact Constructor: 방어적 복사
+         */
+        public Statistics {
+            topPaths = (topPaths != null) ? List.copyOf(topPaths) : List.of();
+            topStatusCodes = (topStatusCodes != null) ? List.copyOf(topStatusCodes) : List.of();
+            topIps = (topIps != null) ? List.copyOf(topIps) : List.of();
+            methodStats = (methodStats != null) ? Map.copyOf(methodStats) : Map.of();
+        }
 
         /**
          * 도메인 로직: 비율 계산
@@ -72,21 +96,6 @@ public class AnalysisResult {
         private double calculateRate(long count) {
             if (totalRequests == 0) return 0.0;
             return Math.round((count * 100.0 / totalRequests) * 100.0) / 100.0;
-        }
-
-        /**
-         * 가변 컬렉션 반환 시 불변 뷰 제공
-         */
-        public List<TopItem> getTopPaths() {
-            return Collections.unmodifiableList(topPaths);
-        }
-
-        public List<TopItem> getTopIps() {
-            return Collections.unmodifiableList(topIps);
-        }
-
-        public Map<String, Long> getMethodStats() {
-            return Collections.unmodifiableMap(methodStats);
         }
     }
 
@@ -119,9 +128,5 @@ public class AnalysisResult {
         public List<String> errorSamples() {
             return errorSamples; // 이미 불변
         }
-    }
-
-    public Map<String, IpInfo> getIpDetails() {
-        return Collections.unmodifiableMap(ipDetails);
     }
 }

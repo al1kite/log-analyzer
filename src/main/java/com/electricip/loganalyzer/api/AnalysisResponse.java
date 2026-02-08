@@ -24,6 +24,11 @@ public record AnalysisResponse(
         @NonNull ParseErrors parseErrors,
         @NonNull AdditionalStats additionalStats
 ) {
+
+    public AnalysisResponse {
+        ipDetails = List.copyOf(ipDetails);
+    }
+
     /**
      * 도메인 모델을 DTO로 변환
      */
@@ -37,28 +42,28 @@ public record AnalysisResponse(
                 .completedAt(result.getCompletedAt())
                 .processingTimeMs(result.getProcessingTimeMs())
                 .basicStats(new BasicStats(
-                        stats.getTotalRequests(),
-                        stats.getSuccessCount(),
-                        stats.getRedirectCount(),
-                        stats.getClientErrorCount(),
-                        stats.getServerErrorCount(),
+                        stats.totalRequests(),
+                        stats.successCount(),
+                        stats.redirectCount(),
+                        stats.clientErrorCount(),
+                        stats.serverErrorCount(),
                         stats.successRate(),
                         stats.redirectRate(),
                         stats.clientErrorRate(),
                         stats.serverErrorRate()))
                 .topStats(new TopStats(
-                        convertTopItems(stats.getTopPaths()),
-                        convertTopItemsForStatusCodes(stats.getTopStatusCodes()),
-                        convertTopItemsForIps(stats.getTopIps())))
+                        convertTopItems(stats.topPaths()),
+                        convertTopItemsForStatusCodes(stats.topStatusCodes()),
+                        convertTopItemsForIps(stats.topIps())))
                 .ipDetails(convertIpDetails(result.getIpDetails()))
                 .parseErrors(new ParseErrors(
                         result.getParseErrors().errorCount(),
                         result.getParseErrors().errorSamples()))
                 .additionalStats(new AdditionalStats(
-                        stats.getMethodStats(),
-                        stats.getAvgResponseTime(),
-                        stats.getAvgSentBytes(),
-                        stats.getTotalTraffic()))
+                        stats.methodStats(),
+                        stats.avgResponseTime(),
+                        stats.avgSentBytes(),
+                        stats.totalTraffic()))
                 .build();
     }
 
