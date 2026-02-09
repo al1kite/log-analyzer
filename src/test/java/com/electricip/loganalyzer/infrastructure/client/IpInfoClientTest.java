@@ -134,6 +134,41 @@ class IpInfoClientTest {
             // 3번 호출 (최초 + 2회 재시도)
             verify(restTemplate, times(3)).getForObject(anyString(), any(Class.class));
         }
+
+        @Test
+        @DisplayName("null 응답은 MAX_ATTEMPTS까지 재시도하고 실패를 기록한다")
+        void shouldRetryAndRecordFailureOnNullResponse() {
+            when(restTemplate.getForObject(anyString(), any(Class.class)))
+                    .thenReturn(null);
+
+            var result = client.getIpInfo("1.2.3.4");
+
+            assertThat(result.isValid()).isFalse();
+            // 3번 호출 (최초 + 2회 재시도)
+            verify(restTemplate, times(3)).getForObject(anyString(), any(Class.class));
+            // 최종 실패 시 1회 기록
+            assertThat(circuitBreaker.getFailureCount()).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("null 응답 반복 시 Circuit Breaker가 열린다")
+        void shouldOpenCircuitOnRepeatedNullResponses() {
+            when(restTemplate.getForObject(anyString(), any(Class.class)))
+                    .thenReturn(null);
+
+            // FAILURE_THRESHOLD(5)회 호출 → 각각 1회 failure 기록
+            for (int i = 0; i < IpInfoCircuitBreaker.FAILURE_THRESHOLD; i++) {
+                client.getIpInfo("10.0.0." + i);
+            }
+
+            assertThat(circuitBreaker.isOpen()).isTrue();
+
+            // 이후 호출은 API 없이 fallback 반환
+            reset(restTemplate);
+            var result = client.getIpInfo("10.0.0.99");
+            assertThat(result.isValid()).isFalse();
+            verifyNoInteractions(restTemplate);
+        }
     }
 
     @Nested

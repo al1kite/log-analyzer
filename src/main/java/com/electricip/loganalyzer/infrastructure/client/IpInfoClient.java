@@ -38,7 +38,8 @@ public class IpInfoClient {
      *
      * @param ip IP 주소
      * @return IP 정보 (null 반환하지 않음)
-     * @throws NullPointerException ip가 null인 경우
+     * @throws NullPointerException     ip가 null인 경우
+     * @throws IllegalArgumentException ip가 빈 문자열 또는 공백만 포함하는 경우
      */
     @Cacheable(value = "ipInfoCache", key = "#ip", unless = "#result == null || !#result.isValid()")
     public IpInfo getIpInfo(String ip) {
@@ -66,8 +67,23 @@ public class IpInfoClient {
                 var result = callApi(ip);
                 if (result.isValid()) {
                     circuitBreaker.recordSuccess();
+                    return result;
                 }
-                return result;
+
+                // invalid 결과 (null 응답 등) — 재시도 대상
+                if (attempt >= MAX_ATTEMPTS) {
+                    circuitBreaker.recordFailure();
+                    log.warn("ipinfo API 유효하지 않은 응답: ip={}, attempts={}", ip, MAX_ATTEMPTS);
+                    return result;
+                }
+                log.warn("ipinfo API 유효하지 않은 응답, 재시도: ip={}, attempt={}/{}",
+                        ip, attempt, MAX_ATTEMPTS);
+
+                if (sleep(BACKOFF_MS * attempt)) {
+                    log.warn("ipinfo API 재시도 중단 (인터럽트): ip={}", ip);
+                    circuitBreaker.recordFailure();
+                    return result;
+                }
 
             } catch (RateLimitExceededException e) {
                 log.error("ipinfo rate limit 초과: ip={}", ip);
