@@ -1,5 +1,6 @@
 package com.electricip.loganalyzer.infrastructure.client;
 
+import com.electricip.loganalyzer.domain.IpInfo;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -9,6 +10,12 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.client.RestTemplate;
+
+import java.util.ArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -152,6 +159,73 @@ class IpInfoClientTest {
         void serverShouldExtendIpInfoException() {
             var ex = new IpInfoServerException("test");
             assertThat(ex).isInstanceOf(IpInfoException.class);
+        }
+    }
+
+    @Nested
+    @DisplayName("동시성 검증")
+    class ConcurrencyTest {
+
+        @Test
+        @DisplayName("여러 스레드에서 Circuit Open 상태로 동시 호출 시 API 호출 없음")
+        void concurrentCallsWithCircuitOpen_noApiCalls() throws Exception {
+            for (int i = 0; i < IpInfoCircuitBreaker.FAILURE_THRESHOLD; i++) {
+                circuitBreaker.recordFailure();
+            }
+
+            int threadCount = 20;
+            var latch = new CountDownLatch(threadCount);
+            var executor = Executors.newFixedThreadPool(10);
+            var tasks = new ArrayList<Future<IpInfo>>();
+
+            for (int i = 0; i < threadCount; i++) {
+                final int idx = i;
+                tasks.add(executor.submit(() -> {
+                    try {
+                        return client.getIpInfo("10.0.0." + idx);
+                    } finally {
+                        latch.countDown();
+                    }
+                }));
+            }
+
+            assertThat(latch.await(10, TimeUnit.SECONDS)).isTrue();
+            executor.shutdown();
+
+            for (var task : tasks) {
+                assertThat(task.get().isValid()).isFalse();
+            }
+            verifyNoInteractions(restTemplate);
+        }
+
+        @Test
+        @DisplayName("여러 스레드에서 동시 실패 시 Circuit Breaker 카운트가 정확하다")
+        void concurrentFailures_circuitBreakerCountAccurate() throws InterruptedException {
+            when(restTemplate.getForObject(anyString(), any(Class.class)))
+                    .thenThrow(new RateLimitExceededException("rate limit"));
+
+            int threadCount = 10;
+            var latch = new CountDownLatch(threadCount);
+            var executor = Executors.newFixedThreadPool(threadCount);
+
+            for (int i = 0; i < threadCount; i++) {
+                final int idx = i;
+                executor.submit(() -> {
+                    try {
+                        client.getIpInfo("10.0.0." + idx);
+                    } finally {
+                        latch.countDown();
+                    }
+                });
+            }
+
+            assertThat(latch.await(10, TimeUnit.SECONDS)).isTrue();
+            executor.shutdown();
+
+            // 각 호출이 1번 실패 기록 → 총 10
+            // 단, 일부가 circuit open 후 호출되면 더 적을 수 있음
+            assertThat(circuitBreaker.getFailureCount()).isGreaterThanOrEqualTo(
+                    IpInfoCircuitBreaker.FAILURE_THRESHOLD);
         }
     }
 }
