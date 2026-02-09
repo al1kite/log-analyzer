@@ -6,6 +6,6 @@ package com.electricip.loganalyzer.infrastructure.client;
 public class RateLimitExceededException extends IpInfoException {
 
     public RateLimitExceededException(String message) {
-        super(message);
+        super("RATE_LIMIT_EXCEEDED", message);
     }
 }

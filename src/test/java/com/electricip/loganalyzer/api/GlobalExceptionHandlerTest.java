@@ -1,6 +1,16 @@
 package com.electricip.loganalyzer.api;
 
 import com.electricip.loganalyzer.domain.InvalidCsvFormatException;
+import com.electricip.loganalyzer.domain.exception.AnalysisNotFoundException;
+import com.electricip.loganalyzer.domain.exception.DuplicateAnalysisIdException;
+import com.electricip.loganalyzer.domain.exception.FileTooLargeException;
+import com.electricip.loganalyzer.domain.exception.InvalidFileException;
+import com.electricip.loganalyzer.domain.exception.LogParsingException;
+import com.electricip.loganalyzer.domain.exception.TooManyParsingErrorsException;
+import com.electricip.loganalyzer.infrastructure.client.IpInfoAuthException;
+import com.electricip.loganalyzer.infrastructure.client.IpInfoException;
+import com.electricip.loganalyzer.infrastructure.client.IpInfoServerException;
+import com.electricip.loganalyzer.infrastructure.client.RateLimitExceededException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -18,7 +28,7 @@ class GlobalExceptionHandlerTest {
 
     @Nested
     @DisplayName("InvalidCsvFormatException 핸들러")
-    class InvalidCsvFormatExceptionTest {
+    class InvalidCsvFormatTest {
 
         @Test
         @DisplayName("400 Bad Request로 응답한다")
@@ -46,49 +56,145 @@ class GlobalExceptionHandlerTest {
     }
 
     @Nested
-    @DisplayName("IllegalStateException 핸들러")
-    class IllegalStateExceptionTest {
+    @DisplayName("InvalidFileException 핸들러")
+    class InvalidFileTest {
 
         @Test
-        @DisplayName("422 Unprocessable Entity로 응답한다")
-        void shouldReturn422() {
-            var ex = new IllegalStateException("유효한 로그가 없습니다");
+        @DisplayName("400 Bad Request로 응답한다")
+        void shouldReturn400() {
+            var ex = new InvalidFileException("파일이 비어있습니다");
 
-            var response = handler.handleIllegalState(ex, request);
+            var response = handler.handleInvalidFile(ex, request);
 
-            assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+            assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
             assertThat(response.getBody()).isNotNull();
-            assertThat(response.getBody().errorCode()).isEqualTo("INVALID_STATE");
-            assertThat(response.getBody().message()).isEqualTo("유효한 로그가 없습니다");
-        }
-
-        @Test
-        @DisplayName("상태 코드가 422이다")
-        void shouldHaveStatusCode422() {
-            var ex = new IllegalStateException("test");
-
-            var response = handler.handleIllegalState(ex, request);
-
-            assertThat(response.getBody()).isNotNull();
-            assertThat(response.getBody().status()).isEqualTo(422);
+            assertThat(response.getBody().errorCode()).isEqualTo("INVALID_FILE");
         }
     }
 
     @Nested
-    @DisplayName("기존 핸들러 정상 동작 확인")
-    class ExistingHandlersTest {
+    @DisplayName("FileTooLargeException 핸들러")
+    class FileTooLargeTest {
 
         @Test
-        @DisplayName("IllegalArgumentException은 400으로 응답한다")
-        void shouldReturn400ForIllegalArgument() {
-            var ex = new IllegalArgumentException("파일이 비어있습니다");
+        @DisplayName("413 Payload Too Large로 응답한다")
+        void shouldReturn413() {
+            var ex = new FileTooLargeException("파일 크기 초과 (최대 50MB)", 100_000_000L, 52_428_800L);
 
-            var response = handler.handleIllegalArgument(ex, request);
+            var response = handler.handleFileTooLarge(ex, request);
+
+            assertThat(response.getStatusCode()).isEqualTo(HttpStatus.PAYLOAD_TOO_LARGE);
+            assertThat(response.getBody()).isNotNull();
+            assertThat(response.getBody().errorCode()).isEqualTo("FILE_TOO_LARGE");
+        }
+    }
+
+    @Nested
+    @DisplayName("LogParsingException 핸들러")
+    class LogParsingTest {
+
+        @Test
+        @DisplayName("400 Bad Request로 응답한다")
+        void shouldReturn400() {
+            var ex = new LogParsingException("유효한 로그가 없습니다");
+
+            var response = handler.handleLogParsing(ex, request);
 
             assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
             assertThat(response.getBody()).isNotNull();
-            assertThat(response.getBody().errorCode()).isEqualTo("INVALID_REQUEST");
+            assertThat(response.getBody().errorCode()).isEqualTo("LOG_PARSING_ERROR");
         }
+    }
+
+    @Nested
+    @DisplayName("TooManyParsingErrorsException 핸들러")
+    class TooManyParsingErrorsTest {
+
+        @Test
+        @DisplayName("422 Unprocessable Entity로 응답한다")
+        void shouldReturn422() {
+            var ex = new TooManyParsingErrorsException("파싱 에러 과다", 100, 95);
+
+            var response = handler.handleTooManyParsingErrors(ex, request);
+
+            assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+            assertThat(response.getBody()).isNotNull();
+            assertThat(response.getBody().errorCode()).isEqualTo("TOO_MANY_PARSING_ERRORS");
+        }
+    }
+
+    @Nested
+    @DisplayName("AnalysisNotFoundException 핸들러")
+    class AnalysisNotFoundTest {
+
+        @Test
+        @DisplayName("404 Not Found로 응답한다")
+        void shouldReturn404() {
+            var ex = new AnalysisNotFoundException("abc-123");
+
+            var response = handler.handleAnalysisNotFound(ex, request);
+
+            assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+            assertThat(response.getBody()).isNotNull();
+            assertThat(response.getBody().errorCode()).isEqualTo("NOT_FOUND");
+            assertThat(response.getBody().message()).contains("abc-123");
+        }
+    }
+
+    @Nested
+    @DisplayName("DuplicateAnalysisIdException 핸들러")
+    class DuplicateAnalysisIdTest {
+
+        @Test
+        @DisplayName("409 Conflict로 응답한다")
+        void shouldReturn409() {
+            var ex = new DuplicateAnalysisIdException("abc-123");
+
+            var response = handler.handleDuplicateAnalysisId(ex, request);
+
+            assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+            assertThat(response.getBody()).isNotNull();
+            assertThat(response.getBody().errorCode()).isEqualTo("DUPLICATE_ID");
+        }
+    }
+
+    @Nested
+    @DisplayName("RateLimitExceededException 핸들러")
+    class RateLimitTest {
+
+        @Test
+        @DisplayName("429 Too Many Requests로 응답한다")
+        void shouldReturn429() {
+            var ex = new RateLimitExceededException("rate limit 초과");
+
+            var response = handler.handleRateLimitExceeded(ex, request);
+
+            assertThat(response.getStatusCode()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
+            assertThat(response.getBody()).isNotNull();
+            assertThat(response.getBody().errorCode()).isEqualTo("RATE_LIMIT_EXCEEDED");
+        }
+    }
+
+    @Nested
+    @DisplayName("IpInfoException 핸들러")
+    class IpInfoTest {
+
+        @Test
+        @DisplayName("502 Bad Gateway로 응답한다")
+        void shouldReturn502() {
+            var ex = new IpInfoException("IP 정보 조회 실패");
+
+            var response = handler.handleIpInfoException(ex, request);
+
+            assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_GATEWAY);
+            assertThat(response.getBody()).isNotNull();
+            assertThat(response.getBody().errorCode()).isEqualTo("IPINFO_ERROR");
+        }
+    }
+
+    @Nested
+    @DisplayName("일반 예외 핸들러")
+    class GeneralExceptionTest {
 
         @Test
         @DisplayName("일반 Exception은 500으로 응답한다")

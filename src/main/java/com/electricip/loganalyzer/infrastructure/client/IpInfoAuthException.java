@@ -6,6 +6,6 @@ package com.electricip.loganalyzer.infrastructure.client;
 public class IpInfoAuthException extends IpInfoException {
 
     public IpInfoAuthException(String message) {
-        super(message);
+        super("IPINFO_AUTH_ERROR", message);
     }
 }

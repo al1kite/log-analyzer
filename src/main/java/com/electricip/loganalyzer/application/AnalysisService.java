@@ -3,6 +3,9 @@ package com.electricip.loganalyzer.application;
 import com.electricip.loganalyzer.domain.AnalysisResult;
 import com.electricip.loganalyzer.domain.InvalidCsvFormatException;
 import com.electricip.loganalyzer.domain.IpInfo;
+import com.electricip.loganalyzer.domain.exception.FileTooLargeException;
+import com.electricip.loganalyzer.domain.exception.InvalidFileException;
+import com.electricip.loganalyzer.domain.exception.LogParsingException;
 import com.electricip.loganalyzer.infrastructure.client.IpInfoClient;
 import com.electricip.loganalyzer.infrastructure.parser.CsvLogParser;
 import com.electricip.loganalyzer.infrastructure.repository.AnalysisRepository;
@@ -34,25 +37,26 @@ public class AnalysisService {
     
     /**
      * 로그 분석
-     * 
-     * @throws IllegalArgumentException 파일이 유효하지 않은 경우
-     * @throws RuntimeException 분석 실패 시
+     *
+     * @throws InvalidFileException 파일이 유효하지 않은 경우
+     * @throws FileTooLargeException 파일 크기 초과 시
+     * @throws LogParsingException 분석 실패 시
      */
     public AnalysisResult analyze(MultipartFile file) {
         Objects.requireNonNull(file, "file은 null일 수 없습니다");
         validateFile(file);
-        
+
         var startTime = System.currentTimeMillis();
-        
+
         log.info("분석 시작: file={}, size={}bytes", file.getOriginalFilename(), file.getSize());
-        
+
         try {
             // 1. 파싱
             var parseResult = logParser.parse(file.getInputStream());
             var logs = parseResult.logs();
 
             if (logs.isEmpty()) {
-                throw new IllegalStateException("유효한 로그가 없습니다");
+                throw new LogParsingException("유효한 로그가 없습니다");
             }
 
             // 2. 통계 계산
@@ -81,12 +85,12 @@ public class AnalysisService {
 
             return result;
 
-        } catch (InvalidCsvFormatException | IllegalArgumentException | IllegalStateException e) {
+        } catch (InvalidCsvFormatException | LogParsingException e) {
             log.error("분석 실패: {}", e.getMessage(), e);
             throw e;
         } catch (Exception e) {
             log.error("분석 실패: {}", e.getMessage(), e);
-            throw new RuntimeException("로그 분석에 실패했습니다: " + e.getMessage(), e);
+            throw new LogParsingException("로그 분석에 실패했습니다: " + e.getMessage(), e);
         }
     }
 
@@ -109,18 +113,19 @@ public class AnalysisService {
 
     private void validateFile(MultipartFile file) {
         if (file.isEmpty()) {
-            throw new IllegalArgumentException("파일이 비어있습니다");
+            throw new InvalidFileException("파일이 비어있습니다");
         }
-        
+
         var maxBytes = maxFileSizeMb * 1024L * 1024L;
         if (file.getSize() > maxBytes) {
-            throw new IllegalArgumentException(
-                    String.format("파일 크기 초과 (최대 %dMB)", maxFileSizeMb));
+            throw new FileTooLargeException(
+                    String.format("파일 크기 초과 (최대 %dMB)", maxFileSizeMb),
+                    file.getSize(), maxBytes);
         }
-        
+
         var filename = file.getOriginalFilename();
         if (filename == null || !filename.toLowerCase().endsWith(".csv")) {
-            throw new IllegalArgumentException("CSV 파일만 업로드 가능합니다");
+            throw new InvalidFileException("CSV 파일만 업로드 가능합니다");
         }
     }
     

@@ -1,5 +1,6 @@
 package com.electricip.loganalyzer.domain;
 
+import com.electricip.loganalyzer.domain.exception.LogAnalyzerException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -71,9 +72,17 @@ class InvalidCsvFormatExceptionTest {
     }
 
     @Test
-    @DisplayName("RuntimeException을 상속한다")
-    void shouldExtendRuntimeException() {
+    @DisplayName("LogAnalyzerException을 상속한다")
+    void shouldExtendLogAnalyzerException() {
         var ex = new InvalidCsvFormatException("test");
+        assertThat(ex).isInstanceOf(LogAnalyzerException.class);
         assertThat(ex).isInstanceOf(RuntimeException.class);
+    }
+
+    @Test
+    @DisplayName("errorCode가 INVALID_CSV_FORMAT이다")
+    void shouldHaveCorrectErrorCode() {
+        var ex = new InvalidCsvFormatException("test");
+        assertThat(ex.getErrorCode()).isEqualTo("INVALID_CSV_FORMAT");
     }
 }
