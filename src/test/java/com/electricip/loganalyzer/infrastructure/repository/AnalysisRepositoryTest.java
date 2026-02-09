@@ -161,20 +161,22 @@ class AnalysisRepositoryTest {
     class CacheBehaviorTest {
 
         @Test
-        @DisplayName("maximumSize 초과 시 오래된 항목이 제거된다")
+        @DisplayName("maximumSize 초과 시 항목이 eviction된다")
         void shouldEvictWhenMaxSizeExceeded() {
-            var smallRepo = new AnalysisRepository(
+            com.github.benmanes.caffeine.cache.Cache<String, AnalysisResult> cache =
                     com.github.benmanes.caffeine.cache.Caffeine.newBuilder()
                             .maximumSize(5)
-                            .build()
-            );
+                            .build();
+            var smallRepo = new AnalysisRepository(cache);
 
             for (int i = 0; i < 10; i++) {
                 smallRepo.save(createResult("id-" + i));
             }
 
-            smallRepo.deleteAll();
-            assertThat(smallRepo.count()).isZero();
+            // Caffeine은 비동기 eviction이므로 cleanUp()으로 즉시 반영
+            cache.cleanUp();
+
+            assertThat(cache.asMap().size()).isLessThanOrEqualTo(5);
         }
     }
 
@@ -186,24 +188,24 @@ class AnalysisRepositoryTest {
         @DisplayName("100개 동시 저장 시 중복 없이 모두 저장된다")
         void concurrentSave_noDuplicates() throws InterruptedException {
             var latch = new CountDownLatch(100);
-            var executor = Executors.newFixedThreadPool(10);
 
             var results = IntStream.range(0, 100)
                     .mapToObj(i -> createResult("id-" + i))
                     .toList();
 
-            for (var result : results) {
-                executor.submit(() -> {
-                    try {
-                        repository.save(result);
-                    } finally {
-                        latch.countDown();
-                    }
-                });
-            }
+            try (var executor = Executors.newFixedThreadPool(10)) {
+                for (var result : results) {
+                    executor.submit(() -> {
+                        try {
+                            repository.save(result);
+                        } finally {
+                            latch.countDown();
+                        }
+                    });
+                }
 
-            assertThat(latch.await(10, TimeUnit.SECONDS)).isTrue();
-            executor.shutdown();
+                assertThat(latch.await(10, TimeUnit.SECONDS)).isTrue();
+            }
 
             assertThat(repository.count()).isEqualTo(100);
         }
@@ -217,29 +219,29 @@ class AnalysisRepositoryTest {
             }
 
             var latch = new CountDownLatch(100);
-            var executor = Executors.newFixedThreadPool(10);
 
             // 50개 저장 + 50개 조회 동시 실행
-            for (int i = 0; i < 50; i++) {
-                final int idx = i;
-                executor.submit(() -> {
-                    try {
-                        repository.save(createResult("new-" + idx));
-                    } finally {
-                        latch.countDown();
-                    }
-                });
-                executor.submit(() -> {
-                    try {
-                        repository.findById("pre-" + idx);
-                    } finally {
-                        latch.countDown();
-                    }
-                });
-            }
+            try (var executor = Executors.newFixedThreadPool(10)) {
+                for (int i = 0; i < 50; i++) {
+                    final int idx = i;
+                    executor.submit(() -> {
+                        try {
+                            repository.save(createResult("new-" + idx));
+                        } finally {
+                            latch.countDown();
+                        }
+                    });
+                    executor.submit(() -> {
+                        try {
+                            repository.findById("pre-" + idx);
+                        } finally {
+                            latch.countDown();
+                        }
+                    });
+                }
 
-            assertThat(latch.await(10, TimeUnit.SECONDS)).isTrue();
-            executor.shutdown();
+                assertThat(latch.await(10, TimeUnit.SECONDS)).isTrue();
+            }
 
             // 기존 50 + 신규 50 = 100
             assertThat(repository.count()).isEqualTo(100);
@@ -251,28 +253,28 @@ class AnalysisRepositoryTest {
         @DisplayName("저장과 삭제를 동시에 수행해도 예외 없음")
         void concurrentSaveAndDelete_noException() throws InterruptedException {
             var latch = new CountDownLatch(200);
-            var executor = Executors.newFixedThreadPool(10);
 
-            for (int i = 0; i < 100; i++) {
-                final int idx = i;
-                executor.submit(() -> {
-                    try {
-                        repository.save(createResult("cd-" + idx));
-                    } finally {
-                        latch.countDown();
-                    }
-                });
-                executor.submit(() -> {
-                    try {
-                        repository.deleteById("cd-" + idx);
-                    } finally {
-                        latch.countDown();
-                    }
-                });
+            try (var executor = Executors.newFixedThreadPool(10)) {
+                for (int i = 0; i < 100; i++) {
+                    final int idx = i;
+                    executor.submit(() -> {
+                        try {
+                            repository.save(createResult("cd-" + idx));
+                        } finally {
+                            latch.countDown();
+                        }
+                    });
+                    executor.submit(() -> {
+                        try {
+                            repository.deleteById("cd-" + idx);
+                        } finally {
+                            latch.countDown();
+                        }
+                    });
+                }
+
+                assertThat(latch.await(10, TimeUnit.SECONDS)).isTrue();
             }
-
-            assertThat(latch.await(10, TimeUnit.SECONDS)).isTrue();
-            executor.shutdown();
 
             // 예외 없이 완료되면 성공 (최종 상태는 타이밍에 따라 다름)
             assertThat(repository.count()).isGreaterThanOrEqualTo(0);

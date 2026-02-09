@@ -29,8 +29,13 @@ public class AnalysisRepository {
                 .maximumSize(1_000)
                 .expireAfterWrite(24, TimeUnit.HOURS)
                 .expireAfterAccess(12, TimeUnit.HOURS)
-                .removalListener((String key, AnalysisResult value, RemovalCause cause) ->
-                        log.info("분석 결과 제거: id={}, reason={}", key, cause))
+                .removalListener((String key, AnalysisResult value, RemovalCause cause) -> {
+                    if (cause.wasEvicted()) {
+                        log.warn("분석 결과 자동 제거(eviction): id={}, reason={}", key, cause);
+                    } else {
+                        log.debug("분석 결과 제거: id={}, reason={}", key, cause);
+                    }
+                })
                 .recordStats()
                 .build();
     }
@@ -80,16 +85,14 @@ public class AnalysisRepository {
     public boolean deleteById(String analysisId) {
         Objects.requireNonNull(analysisId, "analysisId는 null일 수 없습니다");
 
-        var existed = storage.getIfPresent(analysisId) != null;
-        storage.invalidate(analysisId);
-        return existed;
+        return storage.asMap().remove(analysisId) != null;
     }
 
     /**
      * 개수 조회
      */
-    public long count() {
-        return storage.estimatedSize();
+    public int count() {
+        return storage.asMap().size();
     }
 
     /**
