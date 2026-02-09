@@ -1,6 +1,7 @@
 package com.electricip.loganalyzer.application;
 
 import com.electricip.loganalyzer.domain.AnalysisResult;
+import com.electricip.loganalyzer.domain.InvalidCsvFormatException;
 import com.electricip.loganalyzer.domain.IpInfo;
 import com.electricip.loganalyzer.infrastructure.client.IpInfoClient;
 import com.electricip.loganalyzer.infrastructure.parser.CsvLogParser;
@@ -53,13 +54,13 @@ public class AnalysisService {
             if (logs.isEmpty()) {
                 throw new IllegalStateException("유효한 로그가 없습니다");
             }
-            
+
             // 2. 통계 계산
             var statistics = statisticsCalculator.calculate(logs);
-            
+
             // 3. IP enrichment
             var ipDetails = enrichIpInfo(statistics.topIps());
-            
+
             // 4. 결과 생성
             var result = AnalysisResult.builder()
                     .analysisId(UUID.randomUUID().toString())
@@ -67,21 +68,22 @@ public class AnalysisService {
                     .processingTimeMs(System.currentTimeMillis() - startTime)
                     .statistics(statistics)
                     .ipDetails(ipDetails)
-                    .parseErrors(new AnalysisResult.ParseErrors(
-                            parseResult.errorCount(),
-                            parseResult.errorSamples()))
+                    .parseStatistics(parseResult.parseStatistics())
                     .build();
-            
+
             // 5. 저장
             repository.save(result);
-            
-            log.info("분석 완료: id={}, duration={}ms, total={}", 
-                    result.getAnalysisId(), 
+
+            log.info("분석 완료: id={}, duration={}ms, total={}",
+                    result.getAnalysisId(),
                     result.getProcessingTimeMs(),
                     statistics.totalRequests());
-            
+
             return result;
-            
+
+        } catch (InvalidCsvFormatException | IllegalArgumentException | IllegalStateException e) {
+            log.error("분석 실패: {}", e.getMessage(), e);
+            throw e;
         } catch (Exception e) {
             log.error("분석 실패: {}", e.getMessage(), e);
             throw new RuntimeException("로그 분석에 실패했습니다: " + e.getMessage(), e);

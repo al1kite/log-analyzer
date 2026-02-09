@@ -1,9 +1,11 @@
 package com.electricip.loganalyzer.infrastructure.parser;
 
 import com.electricip.loganalyzer.domain.AccessLog;
+import com.electricip.loganalyzer.domain.InvalidCsvFormatException;
+import com.electricip.loganalyzer.domain.ParseError;
+import com.electricip.loganalyzer.domain.ParseStatistics;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.csv.CSVFormat;
-import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
 import org.apache.commons.io.input.BOMInputStream;
 import org.springframework.beans.factory.annotation.Value;
@@ -15,11 +17,8 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Locale;
-import java.util.Objects;
+import java.time.format.DateTimeParseException;
+import java.util.*;
 
 /**
  * CSV 로그 파서
@@ -27,74 +26,134 @@ import java.util.Objects;
 @Slf4j
 @Component
 public class CsvLogParser {
-    
-    private static final int MAX_ERROR_SAMPLES = 5;
-    private static final DateTimeFormatter FORMATTER = 
+
+    private static final DateTimeFormatter FORMATTER =
             DateTimeFormatter.ofPattern("M/d/yyyy, h:mm:ss.SSS a", Locale.ENGLISH);
-    
+
+    private static final Set<String> REQUIRED_HEADERS = Set.of(
+            "TimeGenerated [UTC]",
+            "ClientIp",
+            "HttpMethod",
+            "RequestUri",
+            "UserAgent",
+            "HttpStatus",
+            "HttpVersion",
+            "ReceivedBytes",
+            "SentBytes",
+            "ClientResponseTime",
+            "SslProtocol",
+            "OriginalRequestUriWithArgs"
+    );
+
     @Value("${log-analysis.max-file-lines:200000}")
     private int maxFileLines;
-    
+
     /**
      * CSV 파일 파싱
-     * 
+     *
      * @param inputStream CSV 입력 스트림
      * @return 파싱 결과
      * @throws NullPointerException inputStream이 null인 경우
-     * @throws RuntimeException 파싱 실패 시
+     * @throws InvalidCsvFormatException 헤더가 올바르지 않거나 파싱 실패 시
      */
     public ParseResult parse(InputStream inputStream) {
         Objects.requireNonNull(inputStream, "inputStream은 null일 수 없습니다");
-        
+
         var logs = new ArrayList<AccessLog>();
-        var errorSamples = new ArrayList<String>();
+        var errorSamples = new ArrayList<ParseError>();
+        var errorsByType = new HashMap<String, Integer>();
         var errorCount = 0;
         var lineNumber = 0;
-        
-        // try-with-resources
+
         try (var reader = new BufferedReader(
                 new InputStreamReader(new BOMInputStream(inputStream), StandardCharsets.UTF_8))) {
-            
+
             var csvFormat = CSVFormat.DEFAULT.builder()
                     .setHeader()
                     .setSkipHeaderRecord(true)
                     .setIgnoreHeaderCase(true)
                     .setTrim(true)
                     .build();
-            
+
             try (var csvParser = csvFormat.parse(reader)) {
+                validateHeaders(csvParser.getHeaderMap());
+
                 for (CSVRecord record : csvParser) {
                     lineNumber++;
-                    
+
                     if (lineNumber > maxFileLines) {
                         log.warn("최대 라인 수 도달: {}", maxFileLines);
                         break;
                     }
-                    
+
                     try {
                         var accessLog = parseRecord(record);
                         logs.add(accessLog);
                     } catch (Exception e) {
                         errorCount++;
-                        if (errorSamples.size() < MAX_ERROR_SAMPLES) {
-                            errorSamples.add(String.format("Line %d: %s", 
-                                    lineNumber, e.getMessage()));
+                        var errorType = classifyError(e);
+                        errorsByType.merge(errorType.name(), 1, Integer::sum);
+
+                        if (errorSamples.size() < ParseStatistics.MAX_ERROR_SAMPLES) {
+                            errorSamples.add(new ParseError(
+                                    lineNumber,
+                                    e.getMessage(),
+                                    errorType,
+                                    LocalDateTime.now()
+                            ));
                         }
                     }
                 }
             }
-            
-            log.info("파싱 완료: total={}, success={}, errors={}", 
+
+            log.info("파싱 완료: total={}, success={}, errors={}",
                     lineNumber, logs.size(), errorCount);
-            
-            return new ParseResult(logs, errorCount, errorSamples);
-            
+
+            var parseStatistics = new ParseStatistics(
+                    lineNumber, logs.size(), errorCount, errorsByType, errorSamples);
+
+            return new ParseResult(logs, parseStatistics);
+
+        } catch (InvalidCsvFormatException e) {
+            throw e;
         } catch (Exception e) {
             log.error("CSV 파싱 실패", e);
-            throw new RuntimeException("CSV 파일 파싱 실패: " + e.getMessage(), e);
+            throw new InvalidCsvFormatException("CSV 파일 파싱 실패: " + e.getMessage());
         }
     }
-    
+
+    /**
+     * 헤더 검증 — 대소문자 무시 비교, 누락 시 InvalidCsvFormatException 발생
+     */
+    private void validateHeaders(Map<String, Integer> headerMap) {
+        var actualHeaders = headerMap.keySet().stream()
+                .map(String::toLowerCase)
+                .collect(java.util.stream.Collectors.toSet());
+
+        var missingHeaders = REQUIRED_HEADERS.stream()
+                .filter(required -> !actualHeaders.contains(required.toLowerCase()))
+                .sorted()
+                .toList();
+
+        if (!missingHeaders.isEmpty()) {
+            throw new InvalidCsvFormatException(
+                    "필수 헤더가 누락되었습니다: " + missingHeaders, missingHeaders);
+        }
+    }
+
+    /**
+     * 에러 타입 분류
+     */
+    private ParseError.ErrorType classifyError(Exception e) {
+        if (e instanceof NumberFormatException || e instanceof DateTimeParseException) {
+            return ParseError.ErrorType.PARSING;
+        }
+        if (e instanceof IllegalArgumentException) {
+            return ParseError.ErrorType.VALIDATION;
+        }
+        return ParseError.ErrorType.FORMAT;
+    }
+
     /**
      * CSV 레코드를 AccessLog로 변환
      */
@@ -114,7 +173,7 @@ public class CsvLogParser {
                 record.get("OriginalRequestUriWithArgs")
         );
     }
-    
+
     private LocalDateTime parseDateTime(String value) {
         if (value == null || value.isBlank()) return null;
         try {
@@ -123,7 +182,7 @@ public class CsvLogParser {
             return null;
         }
     }
-    
+
     private Integer parseInteger(String value) {
         if (value == null || value.isBlank()) return null;
         try {
@@ -132,7 +191,7 @@ public class CsvLogParser {
             return null;
         }
     }
-    
+
     private Long parseLong(String value) {
         if (value == null || value.isBlank()) return null;
         try {
@@ -141,7 +200,7 @@ public class CsvLogParser {
             return null;
         }
     }
-    
+
     private Double parseDouble(String value) {
         if (value == null || value.isBlank()) return null;
         try {
@@ -150,21 +209,17 @@ public class CsvLogParser {
             return null;
         }
     }
-    
+
     /**
      * 파싱 결과 (Record)
      */
     public record ParseResult(
             List<AccessLog> logs,
-            int errorCount,
-            List<String> errorSamples
+            ParseStatistics parseStatistics
     ) {
-        /**
-         * 가변 컬렉션을 불변으로 변환
-         */
         public ParseResult {
             logs = List.copyOf(logs);
-            errorSamples = List.copyOf(errorSamples);
+            Objects.requireNonNull(parseStatistics, "parseStatistics는 null일 수 없습니다");
         }
     }
 }

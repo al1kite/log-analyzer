@@ -1,5 +1,6 @@
 package com.electricip.loganalyzer.api;
 
+import com.electricip.loganalyzer.domain.InvalidCsvFormatException;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -74,6 +75,44 @@ public class GlobalExceptionHandler {
                 ));
     }
     
+    /**
+     * InvalidCsvFormatException 처리
+     */
+    @ExceptionHandler(InvalidCsvFormatException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidCsvFormat(
+            InvalidCsvFormatException e, HttpServletRequest request) {
+
+        log.error("잘못된 CSV 형식: {}", e.getMessage());
+
+        return ResponseEntity
+                .badRequest()
+                .body(ErrorResponse.of(
+                        HttpStatus.BAD_REQUEST,
+                        "INVALID_CSV_FORMAT",
+                        e.getMessage(),
+                        request.getRequestURI()
+                ));
+    }
+
+    /**
+     * IllegalStateException 처리
+     */
+    @ExceptionHandler(IllegalStateException.class)
+    public ResponseEntity<ErrorResponse> handleIllegalState(
+            IllegalStateException e, HttpServletRequest request) {
+
+        log.error("잘못된 상태: {}", e.getMessage());
+
+        return ResponseEntity
+                .status(HttpStatus.UNPROCESSABLE_ENTITY)
+                .body(ErrorResponse.of(
+                        HttpStatus.UNPROCESSABLE_ENTITY,
+                        "INVALID_STATE",
+                        e.getMessage(),
+                        request.getRequestURI()
+                ));
+    }
+
     /**
      * 일반 예외
      */
