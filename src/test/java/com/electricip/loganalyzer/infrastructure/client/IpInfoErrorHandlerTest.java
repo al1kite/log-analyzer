@@ -1,5 +1,6 @@
 package com.electricip.loganalyzer.infrastructure.client;
 
+import com.electricip.loganalyzer.domain.exception.LogAnalyzerException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -110,6 +111,43 @@ class IpInfoErrorHandlerTest {
                         .isInstanceOf(IpInfoException.class)
                         .hasMessageContaining("404");
             }
+        }
+    }
+
+    @Nested
+    @DisplayName("LogAnalyzerException 상속 검증")
+    class InheritanceTest {
+
+        @Test
+        @DisplayName("IpInfoException은 LogAnalyzerException을 상속한다")
+        void ipInfoExceptionShouldExtendLogAnalyzerException() {
+            var ex = new IpInfoException("test");
+            assertThat(ex).isInstanceOf(LogAnalyzerException.class);
+            assertThat(ex.getErrorCode()).isEqualTo("IPINFO_ERROR");
+        }
+
+        @Test
+        @DisplayName("RateLimitExceededException은 LogAnalyzerException을 상속한다")
+        void rateLimitShouldExtendLogAnalyzerException() {
+            var ex = new RateLimitExceededException("test");
+            assertThat(ex).isInstanceOf(LogAnalyzerException.class);
+            assertThat(ex.getErrorCode()).isEqualTo("RATE_LIMIT_EXCEEDED");
+        }
+
+        @Test
+        @DisplayName("IpInfoAuthException은 LogAnalyzerException을 상속한다")
+        void authShouldExtendLogAnalyzerException() {
+            var ex = new IpInfoAuthException("test");
+            assertThat(ex).isInstanceOf(LogAnalyzerException.class);
+            assertThat(ex.getErrorCode()).isEqualTo("IPINFO_AUTH_ERROR");
+        }
+
+        @Test
+        @DisplayName("IpInfoServerException은 LogAnalyzerException을 상속한다")
+        void serverShouldExtendLogAnalyzerException() {
+            var ex = new IpInfoServerException("test");
+            assertThat(ex).isInstanceOf(LogAnalyzerException.class);
+            assertThat(ex.getErrorCode()).isEqualTo("IPINFO_SERVER_ERROR");
         }
     }
 }
