@@ -26,15 +26,19 @@ public class IpInfoCircuitBreaker {
      * — 타임아웃 이후면 half-open (재시도 허용, 카운터 리셋)
      */
     public boolean isOpen() {
-        if (failureCount.get() < FAILURE_THRESHOLD) {
+        int currentFailures = failureCount.get();
+        if (currentFailures < FAILURE_THRESHOLD) {
             return false;
         }
 
-        // 타임아웃 지났으면 half-open → 카운터 리셋
+        // 타임아웃 지났으면 half-open → CAS로 단일 스레드만 리셋
         if (System.currentTimeMillis() - lastFailureTime.get() > TIMEOUT_MS) {
-            log.info("Circuit Breaker half-open: 재시도 허용");
-            failureCount.set(0);
-            return false;
+            if (failureCount.compareAndSet(currentFailures, 0)) {
+                log.info("Circuit Breaker half-open: 재시도 허용");
+                return false;
+            }
+            // 다른 스레드가 이미 리셋 → 현재 상태로 판단
+            return failureCount.get() >= FAILURE_THRESHOLD;
         }
 
         return true;
@@ -51,8 +55,8 @@ public class IpInfoCircuitBreaker {
      * 실패 기록 — 카운터 증가 + 시각 갱신
      */
     public void recordFailure() {
-        failureCount.incrementAndGet();
         lastFailureTime.set(System.currentTimeMillis());
+        failureCount.incrementAndGet();
     }
 
     /**

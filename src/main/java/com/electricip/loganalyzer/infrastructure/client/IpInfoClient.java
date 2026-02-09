@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.util.UriComponentsBuilder;
 
 import java.util.Objects;
 
@@ -39,13 +40,12 @@ public class IpInfoClient {
      * @return IP 정보 (null 반환하지 않음)
      * @throws NullPointerException ip가 null인 경우
      */
-    @Cacheable(value = "ipInfoCache", key = "#ip", unless = "#result == null")
+    @Cacheable(value = "ipInfoCache", key = "#ip", unless = "#result == null || !#result.isValid()")
     public IpInfo getIpInfo(String ip) {
         Objects.requireNonNull(ip, "ip는 null일 수 없습니다");
 
         if (ip.isBlank()) {
-            log.warn("빈 IP 주소");
-            return IpInfo.unknown(ip);
+            throw new IllegalArgumentException("IP는 비어있을 수 없습니다");
         }
 
         // Circuit Open → fallback
@@ -61,10 +61,12 @@ public class IpInfoClient {
      * 재시도 로직 (exponential backoff)
      */
     private IpInfo callWithRetry(String ip) {
-        for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        for (int attempt = 1; ; attempt++) {
             try {
                 var result = callApi(ip);
-                circuitBreaker.recordSuccess();
+                if (result.isValid()) {
+                    circuitBreaker.recordSuccess();
+                }
                 return result;
 
             } catch (RateLimitExceededException e) {
@@ -78,9 +80,8 @@ public class IpInfoClient {
                 return IpInfo.unknown(ip);
 
             } catch (Exception e) {
-                circuitBreaker.recordFailure();
-
-                if (attempt == MAX_ATTEMPTS) {
+                if (attempt >= MAX_ATTEMPTS) {
+                    circuitBreaker.recordFailure();
                     log.error("ipinfo API 최종 실패: ip={}, attempts={}", ip, MAX_ATTEMPTS, e);
                     return IpInfo.unknown(ip);
                 }
@@ -88,11 +89,13 @@ public class IpInfoClient {
                 log.warn("ipinfo API 재시도: ip={}, attempt={}/{}, error={}",
                         ip, attempt, MAX_ATTEMPTS, e.getMessage());
 
-                sleep(BACKOFF_MS * attempt);
+                if (sleep(BACKOFF_MS * attempt)) {
+                    log.warn("ipinfo API 재시도 중단 (인터럽트): ip={}", ip);
+                    circuitBreaker.recordFailure();
+                    return IpInfo.unknown(ip);
+                }
             }
         }
-
-        return IpInfo.unknown(ip);
     }
 
     /**
@@ -105,8 +108,9 @@ public class IpInfoClient {
         if (response != null) {
             log.debug("IP 정보 조회 성공: ip={}, country={}", ip, response.country);
 
+            var resolvedIp = (response.ip != null && !response.ip.isBlank()) ? response.ip : ip;
             return IpInfo.of(
-                    response.ip,
+                    resolvedIp,
                     response.country,
                     response.region,
                     response.city,
@@ -121,17 +125,23 @@ public class IpInfoClient {
      * API URL 구성
      */
     private String buildUrl(String ip) {
+        var builder = UriComponentsBuilder.fromHttpUrl(baseUrl)
+                .pathSegment(ip, "json");
+
         if (token != null && !token.isBlank()) {
-            return String.format("%s/%s?token=%s", baseUrl, ip, token);
+            builder.queryParam("token", token);
         }
-        return String.format("%s/%s/json", baseUrl, ip);
+
+        return builder.build().toUriString();
     }
 
-    private void sleep(long ms) {
+    private boolean sleep(long ms) {
         try {
             Thread.sleep(ms);
+            return false;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+            return true;
         }
     }
 

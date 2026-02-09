@@ -148,6 +148,7 @@ public class AnalysisService {
         
         return topIps.stream()
                 .map(AnalysisResult.TopItem::item)
+                .distinct()
                 .collect(Collectors.toMap(
                         ip -> ip,
                         ip -> {

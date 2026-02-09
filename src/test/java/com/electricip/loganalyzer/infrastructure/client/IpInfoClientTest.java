@@ -87,8 +87,8 @@ class IpInfoClientTest {
 
             client.getIpInfo("1.2.3.4");
 
-            // MAX_ATTEMPTS(3)만큼 실패 기록
-            assertThat(circuitBreaker.getFailureCount()).isEqualTo(3);
+            // 최종 실패 시 1회만 기록
+            assertThat(circuitBreaker.getFailureCount()).isEqualTo(1);
         }
     }
 

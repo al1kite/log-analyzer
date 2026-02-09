@@ -1,6 +1,5 @@
 package com.electricip.loganalyzer.infrastructure.client;
 
-import org.springframework.http.HttpStatus;
 import org.springframework.http.client.ClientHttpResponse;
 import org.springframework.web.client.ResponseErrorHandler;
 
@@ -21,10 +20,10 @@ public class IpInfoErrorHandler implements ResponseErrorHandler {
     public void handleError(ClientHttpResponse response) throws IOException {
         var status = response.getStatusCode();
 
-        if (status == HttpStatus.TOO_MANY_REQUESTS) {
+        if (status.value() == 429) {
             throw new RateLimitExceededException("ipinfo API rate limit 초과");
         }
-        if (status == HttpStatus.UNAUTHORIZED || status == HttpStatus.FORBIDDEN) {
+        if (status.value() == 401 || status.value() == 403) {
             throw new IpInfoAuthException("ipinfo API 인증 실패");
         }
         if (status.is5xxServerError()) {

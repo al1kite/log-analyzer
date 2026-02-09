@@ -13,8 +13,6 @@ spring:
       
   cache:
     type: caffeine
-    caffeine:
-      spec: maximumSize=10000,expireAfterWrite=1h
 
 # ipinfo API
 ipinfo:
