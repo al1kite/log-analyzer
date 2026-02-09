@@ -46,10 +46,13 @@ dependencies {
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.assertj:assertj-core:3.24.2")
     testImplementation("org.junit.jupiter:junit-jupiter")
+    testImplementation("net.bytebuddy:byte-buddy:1.15.10")
+    testImplementation("net.bytebuddy:byte-buddy-agent:1.15.10")
 }
 
 tasks.withType<Test> {
     useJUnitPlatform()
+    jvmArgs("-XX:+EnableDynamicAgentLoading")
 }
 
 tasks.withType<JavaCompile> {
