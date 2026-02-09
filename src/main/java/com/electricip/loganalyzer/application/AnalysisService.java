@@ -1,11 +1,12 @@
 package com.electricip.loganalyzer.application;
 
 import com.electricip.loganalyzer.domain.AnalysisResult;
-import com.electricip.loganalyzer.domain.InvalidCsvFormatException;
 import com.electricip.loganalyzer.domain.IpInfo;
 import com.electricip.loganalyzer.domain.exception.FileTooLargeException;
 import com.electricip.loganalyzer.domain.exception.InvalidFileException;
+import com.electricip.loganalyzer.domain.exception.LogAnalyzerException;
 import com.electricip.loganalyzer.domain.exception.LogParsingException;
+import com.electricip.loganalyzer.domain.exception.TooManyParsingErrorsException;
 import com.electricip.loganalyzer.infrastructure.client.IpInfoClient;
 import com.electricip.loganalyzer.infrastructure.parser.CsvLogParser;
 import com.electricip.loganalyzer.infrastructure.repository.AnalysisRepository;
@@ -40,6 +41,7 @@ public class AnalysisService {
      *
      * @throws InvalidFileException 파일이 유효하지 않은 경우
      * @throws FileTooLargeException 파일 크기 초과 시
+     * @throws TooManyParsingErrorsException 파싱 에러 과다 시
      * @throws LogParsingException 분석 실패 시
      */
     public AnalysisResult analyze(MultipartFile file) {
@@ -54,8 +56,15 @@ public class AnalysisService {
             // 1. 파싱
             var parseResult = logParser.parse(file.getInputStream());
             var logs = parseResult.logs();
+            var stats = parseResult.parseStatistics();
 
             if (logs.isEmpty()) {
+                if (stats.errorCount() > 0) {
+                    throw new TooManyParsingErrorsException(
+                            String.format("유효한 로그가 없습니다 (전체 %d줄 중 %d줄 에러)",
+                                    stats.totalLines(), stats.errorCount()),
+                            stats.totalLines(), stats.errorCount(), stats.errorSamples());
+                }
                 throw new LogParsingException("유효한 로그가 없습니다");
             }
 
@@ -85,12 +94,12 @@ public class AnalysisService {
 
             return result;
 
-        } catch (InvalidCsvFormatException | LogParsingException e) {
+        } catch (LogAnalyzerException e) {
             log.error("분석 실패: {}", e.getMessage(), e);
             throw e;
         } catch (Exception e) {
-            log.error("분석 실패: {}", e.getMessage(), e);
-            throw new LogParsingException("로그 분석에 실패했습니다: " + e.getMessage(), e);
+            log.error("분석 실패 (내부 오류): {}", e.getMessage(), e);
+            throw new RuntimeException("로그 분석에 실패했습니다: " + e.getMessage(), e);
         }
     }
 
