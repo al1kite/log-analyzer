@@ -8,7 +8,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Repository;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -29,8 +28,13 @@ public class AnalysisRepository {
                 .maximumSize(1_000)
                 .expireAfterWrite(24, TimeUnit.HOURS)
                 .expireAfterAccess(12, TimeUnit.HOURS)
-                .removalListener((String key, AnalysisResult value, RemovalCause cause) ->
-                        log.info("분석 결과 제거: id={}, reason={}", key, cause))
+                .removalListener((String key, AnalysisResult value, RemovalCause cause) -> {
+                    if (cause.wasEvicted()) {
+                        log.debug("분석 결과 자동 제거: id={}, reason={}", key, cause);
+                    } else {
+                        log.info("분석 결과 제거: id={}, reason={}", key, cause);
+                    }
+                })
                 .recordStats()
                 .build();
     }
@@ -47,7 +51,6 @@ public class AnalysisRepository {
      */
     public void save(AnalysisResult result) {
         Objects.requireNonNull(result, "result는 null일 수 없습니다");
-        Objects.requireNonNull(result.getAnalysisId(), "analysisId는 null일 수 없습니다");
 
         storage.put(result.getAnalysisId(), result);
 
@@ -67,11 +70,7 @@ public class AnalysisRepository {
      * 전체 조회
      */
     public List<AnalysisResult> findAll() {
-        var values = storage.asMap().values();
-        if (values.isEmpty()) {
-            return Collections.emptyList();
-        }
-        return new ArrayList<>(values);
+        return new ArrayList<>(storage.asMap().values());
     }
 
     /**
@@ -80,16 +79,14 @@ public class AnalysisRepository {
     public boolean deleteById(String analysisId) {
         Objects.requireNonNull(analysisId, "analysisId는 null일 수 없습니다");
 
-        var existed = storage.getIfPresent(analysisId) != null;
-        storage.invalidate(analysisId);
-        return existed;
+        return storage.asMap().remove(analysisId) != null;
     }
 
     /**
      * 개수 조회
      */
-    public long count() {
-        return storage.estimatedSize();
+    public int count() {
+        return storage.asMap().size();
     }
 
     /**
