@@ -1,6 +1,7 @@
 package com.electricip.loganalyzer.api;
 
 import com.electricip.loganalyzer.api.GlobalExceptionHandler.ErrorResponse;
+import com.electricip.loganalyzer.api.GlobalExceptionHandler.ParsingErrorResponse;
 import com.electricip.loganalyzer.application.AnalysisService;
 import com.electricip.loganalyzer.domain.exception.AnalysisNotFoundException;
 import io.swagger.v3.oas.annotations.Operation;
@@ -48,7 +49,7 @@ public class AnalysisController {
             @ApiResponse(responseCode = "413", description = "파일 크기 초과",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "422", description = "파싱 에러 과다 (유효한 로그 없음)",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+                    content = @Content(schema = @Schema(implementation = ParsingErrorResponse.class))),
             @ApiResponse(responseCode = "500", description = "서버 내부 오류",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })

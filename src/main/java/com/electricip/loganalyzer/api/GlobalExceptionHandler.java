@@ -13,7 +13,6 @@ import com.electricip.loganalyzer.infrastructure.client.RateLimitExceededExcepti
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -21,6 +20,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * 전역 예외 처리기
@@ -28,13 +28,6 @@ import java.time.LocalDateTime;
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
-
-    private final int maxFileSizeMb;
-
-    public GlobalExceptionHandler(
-            @Value("${log-analysis.max-file-size-mb:50}") int maxFileSizeMb) {
-        this.maxFileSizeMb = maxFileSizeMb;
-    }
 
     /**
      * InvalidCsvFormatException 처리 → 400
@@ -116,18 +109,25 @@ public class GlobalExceptionHandler {
      * TooManyParsingErrorsException 처리 → 422
      */
     @ExceptionHandler(TooManyParsingErrorsException.class)
-    public ResponseEntity<ErrorResponse> handleTooManyParsingErrors(
+    public ResponseEntity<ParsingErrorResponse> handleTooManyParsingErrors(
             TooManyParsingErrorsException e, HttpServletRequest request) {
 
         log.error("파싱 에러 과다: {}", e.getMessage());
 
+        var errorSamples = e.getErrors().stream()
+                .map(err -> new ParsingErrorResponse.ParseErrorSample(
+                        err.lineNumber(), err.errorMessage(), err.errorType().name()))
+                .toList();
+
         return ResponseEntity
                 .status(HttpStatus.UNPROCESSABLE_ENTITY)
-                .body(ErrorResponse.of(
-                        HttpStatus.UNPROCESSABLE_ENTITY,
+                .body(ParsingErrorResponse.of(
                         e.getErrorCode(),
                         e.getMessage(),
-                        request.getRequestURI()
+                        request.getRequestURI(),
+                        e.getTotalLines(),
+                        e.getErrorCount(),
+                        errorSamples
                 ));
     }
 
@@ -235,12 +235,17 @@ public class GlobalExceptionHandler {
 
         log.error("파일 크기 초과");
 
+        var maxBytes = e.getMaxUploadSize();
+        var message = (maxBytes > 0)
+                ? String.format("파일 크기 초과 (최대 %dMB)", maxBytes / (1024 * 1024))
+                : "파일 크기 초과";
+
         return ResponseEntity
                 .status(HttpStatus.PAYLOAD_TOO_LARGE)
                 .body(ErrorResponse.of(
                         HttpStatus.PAYLOAD_TOO_LARGE,
                         "FILE_TOO_LARGE",
-                        String.format("파일 크기 초과 (최대 %dMB)", maxFileSizeMb),
+                        message,
                         request.getRequestURI()
                 ));
     }
@@ -300,5 +305,61 @@ public class GlobalExceptionHandler {
                     path
             );
         }
+    }
+
+    /**
+     * 파싱 에러 과다 응답 — ErrorResponse 필드 + 파싱 통계/샘플
+     */
+    @Schema(description = "파싱 에러 과다 응답 (422)")
+    public record ParsingErrorResponse(
+            @Schema(description = "에러 발생 시각", example = "2026-02-09T14:30:00")
+            LocalDateTime timestamp,
+            @Schema(description = "HTTP 상태 코드", example = "422")
+            int status,
+            @Schema(description = "에러 코드", example = "TOO_MANY_PARSING_ERRORS")
+            String errorCode,
+            @Schema(description = "에러 메시지", example = "유효한 로그가 없습니다 (전체 100줄 중 100줄 에러)")
+            String message,
+            @Schema(description = "요청 경로", example = "/api/analysis")
+            String path,
+            @Schema(description = "전체 라인 수", example = "100")
+            long totalLines,
+            @Schema(description = "에러 라인 수", example = "100")
+            long errorCount,
+            @Schema(description = "에러 샘플 (최대 10건)")
+            List<ParseErrorSample> errorSamples
+    ) {
+        public ParsingErrorResponse {
+            java.util.Objects.requireNonNull(timestamp, "timestamp는 null일 수 없습니다");
+            java.util.Objects.requireNonNull(errorCode, "errorCode는 null일 수 없습니다");
+            java.util.Objects.requireNonNull(path, "path는 null일 수 없습니다");
+            message = (message != null) ? message : "알 수 없는 오류";
+            errorSamples = (errorSamples != null) ? List.copyOf(errorSamples) : List.of();
+        }
+
+        public static ParsingErrorResponse of(String errorCode, String message, String path,
+                                               long totalLines, long errorCount,
+                                               List<ParseErrorSample> errorSamples) {
+            return new ParsingErrorResponse(
+                    LocalDateTime.now(),
+                    HttpStatus.UNPROCESSABLE_ENTITY.value(),
+                    errorCode,
+                    message,
+                    path,
+                    totalLines,
+                    errorCount,
+                    errorSamples
+            );
+        }
+
+        @Schema(description = "파싱 에러 샘플")
+        public record ParseErrorSample(
+                @Schema(description = "에러 발생 라인 번호", example = "42")
+                long lineNumber,
+                @Schema(description = "에러 메시지", example = "잘못된 날짜 형식")
+                String errorMessage,
+                @Schema(description = "에러 유형 (PARSING, VALIDATION, FORMAT)", example = "PARSING")
+                String errorType
+        ) {}
     }
 }
