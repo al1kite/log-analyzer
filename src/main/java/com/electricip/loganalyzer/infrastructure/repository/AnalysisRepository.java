@@ -29,13 +29,8 @@ public class AnalysisRepository {
                 .maximumSize(1_000)
                 .expireAfterWrite(24, TimeUnit.HOURS)
                 .expireAfterAccess(12, TimeUnit.HOURS)
-                .removalListener((String key, AnalysisResult value, RemovalCause cause) -> {
-                    if (cause.wasEvicted()) {
-                        log.warn("분석 결과 자동 제거(eviction): id={}, reason={}", key, cause);
-                    } else {
-                        log.debug("분석 결과 제거: id={}, reason={}", key, cause);
-                    }
-                })
+                .removalListener((String key, AnalysisResult value, RemovalCause cause) ->
+                        log.debug("분석 결과 제거: id={}, reason={}", key, cause))
                 .recordStats()
                 .build();
     }

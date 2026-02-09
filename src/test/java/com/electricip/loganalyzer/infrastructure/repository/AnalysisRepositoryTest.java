@@ -1,6 +1,7 @@
 package com.electricip.loganalyzer.infrastructure.repository;
 
 import com.electricip.loganalyzer.domain.AnalysisResult;
+import com.github.benmanes.caffeine.cache.Cache;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -8,10 +9,10 @@ import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.IntStream;
 
+import static java.util.concurrent.Executors.newFixedThreadPool;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -163,7 +164,7 @@ class AnalysisRepositoryTest {
         @Test
         @DisplayName("maximumSize 초과 시 항목이 eviction된다")
         void shouldEvictWhenMaxSizeExceeded() {
-            com.github.benmanes.caffeine.cache.Cache<String, AnalysisResult> cache =
+            Cache<String, AnalysisResult> cache =
                     com.github.benmanes.caffeine.cache.Caffeine.newBuilder()
                             .maximumSize(5)
                             .build();
@@ -188,12 +189,13 @@ class AnalysisRepositoryTest {
         @DisplayName("100개 동시 저장 시 중복 없이 모두 저장된다")
         void concurrentSave_noDuplicates() throws InterruptedException {
             var latch = new CountDownLatch(100);
+            var executor = newFixedThreadPool(10);
 
             var results = IntStream.range(0, 100)
                     .mapToObj(i -> createResult("id-" + i))
                     .toList();
 
-            try (var executor = Executors.newFixedThreadPool(10)) {
+            try {
                 for (var result : results) {
                     executor.submit(() -> {
                         try {
@@ -205,6 +207,8 @@ class AnalysisRepositoryTest {
                 }
 
                 assertThat(latch.await(10, TimeUnit.SECONDS)).isTrue();
+            } finally {
+                executor.shutdown();
             }
 
             assertThat(repository.count()).isEqualTo(100);
@@ -219,9 +223,10 @@ class AnalysisRepositoryTest {
             }
 
             var latch = new CountDownLatch(100);
+            var executor = newFixedThreadPool(10);
 
             // 50개 저장 + 50개 조회 동시 실행
-            try (var executor = Executors.newFixedThreadPool(10)) {
+            try {
                 for (int i = 0; i < 50; i++) {
                     final int idx = i;
                     executor.submit(() -> {
@@ -241,6 +246,8 @@ class AnalysisRepositoryTest {
                 }
 
                 assertThat(latch.await(10, TimeUnit.SECONDS)).isTrue();
+            } finally {
+                executor.shutdown();
             }
 
             // 기존 50 + 신규 50 = 100
@@ -253,8 +260,9 @@ class AnalysisRepositoryTest {
         @DisplayName("저장과 삭제를 동시에 수행해도 예외 없음")
         void concurrentSaveAndDelete_noException() throws InterruptedException {
             var latch = new CountDownLatch(200);
+            var executor = newFixedThreadPool(10);
 
-            try (var executor = Executors.newFixedThreadPool(10)) {
+            try {
                 for (int i = 0; i < 100; i++) {
                     final int idx = i;
                     executor.submit(() -> {
@@ -274,6 +282,8 @@ class AnalysisRepositoryTest {
                 }
 
                 assertThat(latch.await(10, TimeUnit.SECONDS)).isTrue();
+            } finally {
+                executor.shutdown();
             }
 
             // 예외 없이 완료되면 성공 (최종 상태는 타이밍에 따라 다름)
