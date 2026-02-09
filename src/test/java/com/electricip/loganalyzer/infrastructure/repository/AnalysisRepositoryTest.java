@@ -2,6 +2,7 @@ package com.electricip.loganalyzer.infrastructure.repository;
 
 import com.electricip.loganalyzer.domain.AnalysisResult;
 import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -164,10 +165,9 @@ class AnalysisRepositoryTest {
         @Test
         @DisplayName("maximumSize 초과 시 항목이 eviction된다")
         void shouldEvictWhenMaxSizeExceeded() {
-            Cache<String, AnalysisResult> cache =
-                    com.github.benmanes.caffeine.cache.Caffeine.newBuilder()
-                            .maximumSize(5)
-                            .build();
+            Cache<String, AnalysisResult> cache = Caffeine.newBuilder()
+                    .maximumSize(5)
+                    .build();
             var smallRepo = new AnalysisRepository(cache);
 
             for (int i = 0; i < 10; i++) {
@@ -208,7 +208,8 @@ class AnalysisRepositoryTest {
 
                 assertThat(latch.await(10, TimeUnit.SECONDS)).isTrue();
             } finally {
-                executor.shutdown();
+                executor.shutdownNow();
+                assertThat(executor.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
             }
 
             assertThat(repository.count()).isEqualTo(100);
@@ -247,7 +248,8 @@ class AnalysisRepositoryTest {
 
                 assertThat(latch.await(10, TimeUnit.SECONDS)).isTrue();
             } finally {
-                executor.shutdown();
+                executor.shutdownNow();
+                assertThat(executor.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
             }
 
             // 기존 50 + 신규 50 = 100
@@ -283,7 +285,8 @@ class AnalysisRepositoryTest {
 
                 assertThat(latch.await(10, TimeUnit.SECONDS)).isTrue();
             } finally {
-                executor.shutdown();
+                executor.shutdownNow();
+                assertThat(executor.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
             }
 
             // 예외 없이 완료되면 성공 (최종 상태는 타이밍에 따라 다름)
