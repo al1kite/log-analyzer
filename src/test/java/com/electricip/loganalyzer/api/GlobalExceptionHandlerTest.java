@@ -1,15 +1,14 @@
 package com.electricip.loganalyzer.api;
 
 import com.electricip.loganalyzer.domain.InvalidCsvFormatException;
+import com.electricip.loganalyzer.domain.ParseError;
 import com.electricip.loganalyzer.domain.exception.AnalysisNotFoundException;
 import com.electricip.loganalyzer.domain.exception.DuplicateAnalysisIdException;
 import com.electricip.loganalyzer.domain.exception.FileTooLargeException;
 import com.electricip.loganalyzer.domain.exception.InvalidFileException;
 import com.electricip.loganalyzer.domain.exception.LogParsingException;
 import com.electricip.loganalyzer.domain.exception.TooManyParsingErrorsException;
-import com.electricip.loganalyzer.infrastructure.client.IpInfoAuthException;
 import com.electricip.loganalyzer.infrastructure.client.IpInfoException;
-import com.electricip.loganalyzer.infrastructure.client.IpInfoServerException;
 import com.electricip.loganalyzer.infrastructure.client.RateLimitExceededException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -18,13 +17,14 @@ import org.springframework.http.HttpStatus;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class GlobalExceptionHandlerTest {
 
-    private final GlobalExceptionHandler handler = new GlobalExceptionHandler(50);
+    private final GlobalExceptionHandler handler = new GlobalExceptionHandler();
     private final MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/analysis");
 
     @Nested
@@ -112,15 +112,40 @@ class GlobalExceptionHandlerTest {
     class TooManyParsingErrorsTest {
 
         @Test
-        @DisplayName("422 Unprocessable Entity로 응답한다")
-        void shouldReturn422() {
+        @DisplayName("422 Unprocessable Entity로 응답하며 통계를 포함한다")
+        void shouldReturn422WithStats() {
             var ex = new TooManyParsingErrorsException("파싱 에러 과다", 100, 95);
 
             var response = handler.handleTooManyParsingErrors(ex, request);
 
             assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
-            assertThat(response.getBody()).isNotNull();
-            assertThat(response.getBody().errorCode()).isEqualTo("TOO_MANY_PARSING_ERRORS");
+            var body = response.getBody();
+            assertThat(body).isNotNull();
+            assertThat(body.errorCode()).isEqualTo("TOO_MANY_PARSING_ERRORS");
+            assertThat(body.totalLines()).isEqualTo(100);
+            assertThat(body.errorCount()).isEqualTo(95);
+            assertThat(body.errorSamples()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("에러 샘플이 응답에 포함된다")
+        void shouldIncludeErrorSamples() {
+            var errors = List.of(
+                    new ParseError(1, "잘못된 날짜 형식", ParseError.ErrorType.PARSING, LocalDateTime.now()),
+                    new ParseError(5, "필수 필드 누락", ParseError.ErrorType.VALIDATION, LocalDateTime.now())
+            );
+            var ex = new TooManyParsingErrorsException("파싱 에러 과다", 10, 10, errors);
+
+            var response = handler.handleTooManyParsingErrors(ex, request);
+
+            var body = response.getBody();
+            assertThat(body).isNotNull();
+            assertThat(body.errorSamples()).hasSize(2);
+            assertThat(body.errorSamples().get(0).lineNumber()).isEqualTo(1);
+            assertThat(body.errorSamples().get(0).errorMessage()).isEqualTo("잘못된 날짜 형식");
+            assertThat(body.errorSamples().get(0).errorType()).isEqualTo("PARSING");
+            assertThat(body.errorSamples().get(1).lineNumber()).isEqualTo(5);
+            assertThat(body.errorSamples().get(1).errorType()).isEqualTo("VALIDATION");
         }
     }
 
@@ -198,8 +223,8 @@ class GlobalExceptionHandlerTest {
     class MaxUploadSizeTest {
 
         @Test
-        @DisplayName("413으로 응답하며 설정된 최대 크기가 메시지에 포함된다")
-        void shouldReturn413WithConfiguredMaxSize() {
+        @DisplayName("413으로 응답하며 예외의 maxUploadSize로 메시지를 구성한다")
+        void shouldReturn413WithMaxSizeFromException() {
             var ex = new MaxUploadSizeExceededException(50 * 1024 * 1024L);
 
             var response = handler.handleMaxUploadSizeExceeded(ex, request);
@@ -211,15 +236,25 @@ class GlobalExceptionHandlerTest {
         }
 
         @Test
-        @DisplayName("다른 설정값일 때도 메시지에 반영된다")
-        void shouldReflectCustomMaxSize() {
-            var customHandler = new GlobalExceptionHandler(100);
+        @DisplayName("다른 maxUploadSize도 MB 변환되어 메시지에 반영된다")
+        void shouldConvertDifferentMaxSizeToMb() {
             var ex = new MaxUploadSizeExceededException(100 * 1024 * 1024L);
 
-            var response = customHandler.handleMaxUploadSizeExceeded(ex, request);
+            var response = handler.handleMaxUploadSizeExceeded(ex, request);
 
             assertThat(response.getBody()).isNotNull();
             assertThat(response.getBody().message()).contains("100MB");
+        }
+
+        @Test
+        @DisplayName("maxUploadSize가 -1이면 크기 정보 없이 메시지를 구성한다")
+        void shouldHandleUnknownMaxSize() {
+            var ex = new MaxUploadSizeExceededException(-1);
+
+            var response = handler.handleMaxUploadSizeExceeded(ex, request);
+
+            assertThat(response.getBody()).isNotNull();
+            assertThat(response.getBody().message()).isEqualTo("파일 크기 초과");
         }
     }
 
