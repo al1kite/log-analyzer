@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 import java.util.List;
 
@@ -23,7 +24,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class GlobalExceptionHandlerTest {
 
-    private final GlobalExceptionHandler handler = new GlobalExceptionHandler();
+    private final GlobalExceptionHandler handler = new GlobalExceptionHandler(50);
     private final MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/analysis");
 
     @Nested
@@ -189,6 +190,36 @@ class GlobalExceptionHandlerTest {
             assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_GATEWAY);
             assertThat(response.getBody()).isNotNull();
             assertThat(response.getBody().errorCode()).isEqualTo("IPINFO_ERROR");
+        }
+    }
+
+    @Nested
+    @DisplayName("MaxUploadSizeExceededException 핸들러")
+    class MaxUploadSizeTest {
+
+        @Test
+        @DisplayName("413으로 응답하며 설정된 최대 크기가 메시지에 포함된다")
+        void shouldReturn413WithConfiguredMaxSize() {
+            var ex = new MaxUploadSizeExceededException(50 * 1024 * 1024L);
+
+            var response = handler.handleMaxUploadSizeExceeded(ex, request);
+
+            assertThat(response.getStatusCode()).isEqualTo(HttpStatus.PAYLOAD_TOO_LARGE);
+            assertThat(response.getBody()).isNotNull();
+            assertThat(response.getBody().errorCode()).isEqualTo("FILE_TOO_LARGE");
+            assertThat(response.getBody().message()).contains("50MB");
+        }
+
+        @Test
+        @DisplayName("다른 설정값일 때도 메시지에 반영된다")
+        void shouldReflectCustomMaxSize() {
+            var customHandler = new GlobalExceptionHandler(100);
+            var ex = new MaxUploadSizeExceededException(100 * 1024 * 1024L);
+
+            var response = customHandler.handleMaxUploadSizeExceeded(ex, request);
+
+            assertThat(response.getBody()).isNotNull();
+            assertThat(response.getBody().message()).contains("100MB");
         }
     }
 

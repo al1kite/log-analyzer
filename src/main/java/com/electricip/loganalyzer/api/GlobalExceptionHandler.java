@@ -13,6 +13,7 @@ import com.electricip.loganalyzer.infrastructure.client.RateLimitExceededExcepti
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -27,6 +28,13 @@ import java.time.LocalDateTime;
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    private final int maxFileSizeMb;
+
+    public GlobalExceptionHandler(
+            @Value("${log-analysis.max-file-size-mb:50}") int maxFileSizeMb) {
+        this.maxFileSizeMb = maxFileSizeMb;
+    }
 
     /**
      * InvalidCsvFormatException 처리 → 400
@@ -232,7 +240,7 @@ public class GlobalExceptionHandler {
                 .body(ErrorResponse.of(
                         HttpStatus.PAYLOAD_TOO_LARGE,
                         "FILE_TOO_LARGE",
-                        "파일 크기 초과 (최대 50MB)",
+                        String.format("파일 크기 초과 (최대 %dMB)", maxFileSizeMb),
                         request.getRequestURI()
                 ));
     }
