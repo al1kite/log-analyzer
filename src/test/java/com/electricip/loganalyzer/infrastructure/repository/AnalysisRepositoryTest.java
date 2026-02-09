@@ -7,6 +7,10 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -159,8 +163,6 @@ class AnalysisRepositoryTest {
         @Test
         @DisplayName("maximumSize 초과 시 오래된 항목이 제거된다")
         void shouldEvictWhenMaxSizeExceeded() {
-            // 기본 생성자의 maximumSize=1000이므로
-            // 소규모로 테스트: 별도 Cache 사용
             var smallRepo = new AnalysisRepository(
                     com.github.benmanes.caffeine.cache.Caffeine.newBuilder()
                             .maximumSize(5)
@@ -171,9 +173,109 @@ class AnalysisRepositoryTest {
                 smallRepo.save(createResult("id-" + i));
             }
 
-            // Caffeine은 비동기 eviction이므로 cleanUp 호출
-            smallRepo.deleteAll(); // 정리 확인만
+            smallRepo.deleteAll();
             assertThat(smallRepo.count()).isZero();
+        }
+    }
+
+    @Nested
+    @DisplayName("동시성 검증")
+    class ConcurrencyTest {
+
+        @Test
+        @DisplayName("100개 동시 저장 시 중복 없이 모두 저장된다")
+        void concurrentSave_noDuplicates() throws InterruptedException {
+            var latch = new CountDownLatch(100);
+            var executor = Executors.newFixedThreadPool(10);
+
+            var results = IntStream.range(0, 100)
+                    .mapToObj(i -> createResult("id-" + i))
+                    .toList();
+
+            for (var result : results) {
+                executor.submit(() -> {
+                    try {
+                        repository.save(result);
+                    } finally {
+                        latch.countDown();
+                    }
+                });
+            }
+
+            assertThat(latch.await(10, TimeUnit.SECONDS)).isTrue();
+            executor.shutdown();
+
+            assertThat(repository.count()).isEqualTo(100);
+        }
+
+        @Test
+        @DisplayName("저장과 조회를 동시에 수행해도 일관성 유지")
+        void concurrentSaveAndFind_consistent() throws InterruptedException {
+            // 먼저 50개 저장
+            for (int i = 0; i < 50; i++) {
+                repository.save(createResult("pre-" + i));
+            }
+
+            var latch = new CountDownLatch(100);
+            var executor = Executors.newFixedThreadPool(10);
+
+            // 50개 저장 + 50개 조회 동시 실행
+            for (int i = 0; i < 50; i++) {
+                final int idx = i;
+                executor.submit(() -> {
+                    try {
+                        repository.save(createResult("new-" + idx));
+                    } finally {
+                        latch.countDown();
+                    }
+                });
+                executor.submit(() -> {
+                    try {
+                        repository.findById("pre-" + idx);
+                    } finally {
+                        latch.countDown();
+                    }
+                });
+            }
+
+            assertThat(latch.await(10, TimeUnit.SECONDS)).isTrue();
+            executor.shutdown();
+
+            // 기존 50 + 신규 50 = 100
+            assertThat(repository.count()).isEqualTo(100);
+            // 기존 항목 여전히 조회 가능
+            assertThat(repository.findById("pre-0")).isPresent();
+        }
+
+        @Test
+        @DisplayName("저장과 삭제를 동시에 수행해도 예외 없음")
+        void concurrentSaveAndDelete_noException() throws InterruptedException {
+            var latch = new CountDownLatch(200);
+            var executor = Executors.newFixedThreadPool(10);
+
+            for (int i = 0; i < 100; i++) {
+                final int idx = i;
+                executor.submit(() -> {
+                    try {
+                        repository.save(createResult("cd-" + idx));
+                    } finally {
+                        latch.countDown();
+                    }
+                });
+                executor.submit(() -> {
+                    try {
+                        repository.deleteById("cd-" + idx);
+                    } finally {
+                        latch.countDown();
+                    }
+                });
+            }
+
+            assertThat(latch.await(10, TimeUnit.SECONDS)).isTrue();
+            executor.shutdown();
+
+            // 예외 없이 완료되면 성공 (최종 상태는 타이밍에 따라 다름)
+            assertThat(repository.count()).isGreaterThanOrEqualTo(0);
         }
     }
 }

@@ -1,7 +1,6 @@
 package com.electricip.loganalyzer.infrastructure.parser;
 
 import com.electricip.loganalyzer.domain.InvalidCsvFormatException;
-import com.electricip.loganalyzer.domain.ParseError;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -10,6 +9,11 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -138,6 +142,78 @@ class CsvLogParserTest {
 
             assertThatThrownBy(() -> parser.parse(toStream(csv)))
                     .isInstanceOf(InvalidCsvFormatException.class);
+        }
+    }
+
+    @Nested
+    @DisplayName("동시성 검증 (재진입성)")
+    class ConcurrencyTest {
+
+        @Test
+        @DisplayName("여러 스레드에서 동시에 파싱해도 결과가 올바르다")
+        void multipleParsingSimultaneously_safe() throws Exception {
+            var csvData = VALID_HEADERS + "\n" + VALID_ROW + "\n" + VALID_ROW;
+            int threadCount = 10;
+            var executor = Executors.newFixedThreadPool(threadCount);
+            var latch = new CountDownLatch(threadCount);
+            var tasks = new ArrayList<Future<CsvLogParser.ParseResult>>();
+
+            for (int i = 0; i < threadCount; i++) {
+                tasks.add(executor.submit(() -> {
+                    try {
+                        return parser.parse(toStream(csvData));
+                    } finally {
+                        latch.countDown();
+                    }
+                }));
+            }
+
+            assertThat(latch.await(10, TimeUnit.SECONDS)).isTrue();
+            executor.shutdown();
+
+            for (var task : tasks) {
+                var result = task.get();
+                assertThat(result.logs()).hasSize(2);
+                assertThat(result.parseStatistics().totalLines()).isEqualTo(2);
+                assertThat(result.parseStatistics().successCount()).isEqualTo(2);
+                assertThat(result.parseStatistics().errorCount()).isZero();
+            }
+        }
+
+        @Test
+        @DisplayName("서로 다른 CSV를 동시에 파싱해도 결과가 섞이지 않는다")
+        void differentCsvSimultaneously_noMixUp() throws Exception {
+            int threadCount = 10;
+            var executor = Executors.newFixedThreadPool(threadCount);
+            var latch = new CountDownLatch(threadCount);
+            var tasks = new ArrayList<Future<CsvLogParser.ParseResult>>();
+
+            for (int i = 0; i < threadCount; i++) {
+                final int rowCount = i + 1; // 각 스레드가 다른 행 수
+                var sb = new StringBuilder(VALID_HEADERS).append("\n");
+                for (int r = 0; r < rowCount; r++) {
+                    sb.append(VALID_ROW).append("\n");
+                }
+                var csvData = sb.toString();
+
+                tasks.add(executor.submit(() -> {
+                    try {
+                        return parser.parse(toStream(csvData));
+                    } finally {
+                        latch.countDown();
+                    }
+                }));
+            }
+
+            assertThat(latch.await(10, TimeUnit.SECONDS)).isTrue();
+            executor.shutdown();
+
+            for (int i = 0; i < threadCount; i++) {
+                var result = tasks.get(i).get();
+                int expectedRows = i + 1;
+                assertThat(result.logs()).hasSize(expectedRows);
+                assertThat(result.parseStatistics().successCount()).isEqualTo(expectedRows);
+            }
         }
     }
 }
