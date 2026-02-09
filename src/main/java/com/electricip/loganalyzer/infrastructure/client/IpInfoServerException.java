@@ -6,6 +6,6 @@ package com.electricip.loganalyzer.infrastructure.client;
 public class IpInfoServerException extends IpInfoException {
 
     public IpInfoServerException(String message) {
-        super(message);
+        super("IPINFO_SERVER_ERROR", message);
     }
 }
