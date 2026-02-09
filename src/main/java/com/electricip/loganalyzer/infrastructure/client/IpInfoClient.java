@@ -13,24 +13,28 @@ import java.util.Objects;
 
 /**
  * ipinfo.io API 클라이언트
+ * — 타임아웃, Retry (exponential backoff), Circuit Breaker 적용
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class IpInfoClient {
-    
-    // 의존 객체 주입
+
     private final RestTemplate restTemplate;
-    
+    private final IpInfoCircuitBreaker circuitBreaker;
+
+    private static final int MAX_ATTEMPTS = 3;
+    private static final long BACKOFF_MS = 1_000;
+
     @Value("${ipinfo.base-url:https://ipinfo.io}")
     private String baseUrl;
-    
+
     @Value("${ipinfo.token:#{null}}")
     private String token;
-    
+
     /**
      * IP 정보 조회 (캐싱 적용)
-     * 
+     *
      * @param ip IP 주소
      * @return IP 정보 (null 반환하지 않음)
      * @throws NullPointerException ip가 null인 경우
@@ -38,34 +42,81 @@ public class IpInfoClient {
     @Cacheable(value = "ipInfoCache", key = "#ip", unless = "#result == null")
     public IpInfo getIpInfo(String ip) {
         Objects.requireNonNull(ip, "ip는 null일 수 없습니다");
-        
+
         if (ip.isBlank()) {
             log.warn("빈 IP 주소");
             return IpInfo.unknown(ip);
         }
-        
-        try {
-            var url = buildUrl(ip);
-            var response = restTemplate.getForObject(url, IpInfoResponse.class);
-            
-            if (response != null) {
-                log.debug("IP 정보 조회 성공: ip={}, country={}", ip, response.country);
-                
-                return IpInfo.of(
-                        response.ip,
-                        response.country,
-                        response.region,
-                        response.city,
-                        response.org
-                );
-            }
-        } catch (Exception e) {
-            log.warn("IP 정보 조회 실패: ip={}, error={}", ip, e.getMessage());
+
+        // Circuit Open → fallback
+        if (circuitBreaker.isOpen()) {
+            log.warn("Circuit Breaker open, fallback 사용: ip={}", ip);
+            return IpInfo.unknown(ip);
         }
-        
+
+        return callWithRetry(ip);
+    }
+
+    /**
+     * 재시도 로직 (exponential backoff)
+     */
+    private IpInfo callWithRetry(String ip) {
+        for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+            try {
+                var result = callApi(ip);
+                circuitBreaker.recordSuccess();
+                return result;
+
+            } catch (RateLimitExceededException e) {
+                log.error("ipinfo rate limit 초과: ip={}", ip);
+                circuitBreaker.recordFailure();
+                return IpInfo.unknown(ip);
+
+            } catch (IpInfoAuthException e) {
+                log.error("ipinfo 인증 실패: ip={}", ip);
+                circuitBreaker.recordFailure();
+                return IpInfo.unknown(ip);
+
+            } catch (Exception e) {
+                circuitBreaker.recordFailure();
+
+                if (attempt == MAX_ATTEMPTS) {
+                    log.error("ipinfo API 최종 실패: ip={}, attempts={}", ip, MAX_ATTEMPTS, e);
+                    return IpInfo.unknown(ip);
+                }
+
+                log.warn("ipinfo API 재시도: ip={}, attempt={}/{}, error={}",
+                        ip, attempt, MAX_ATTEMPTS, e.getMessage());
+
+                sleep(BACKOFF_MS * attempt);
+            }
+        }
+
         return IpInfo.unknown(ip);
     }
-    
+
+    /**
+     * API 호출
+     */
+    private IpInfo callApi(String ip) {
+        var url = buildUrl(ip);
+        var response = restTemplate.getForObject(url, IpInfoResponse.class);
+
+        if (response != null) {
+            log.debug("IP 정보 조회 성공: ip={}, country={}", ip, response.country);
+
+            return IpInfo.of(
+                    response.ip,
+                    response.country,
+                    response.region,
+                    response.city,
+                    response.org
+            );
+        }
+
+        return IpInfo.unknown(ip);
+    }
+
     /**
      * API URL 구성
      */
@@ -75,7 +126,15 @@ public class IpInfoClient {
         }
         return String.format("%s/%s/json", baseUrl, ip);
     }
-    
+
+    private void sleep(long ms) {
+        try {
+            Thread.sleep(ms);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
     /**
      * ipinfo API 응답 DTO (Record)
      */
