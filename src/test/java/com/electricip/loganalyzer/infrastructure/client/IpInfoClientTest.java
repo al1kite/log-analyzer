@@ -1,5 +1,6 @@
 package com.electricip.loganalyzer.infrastructure.client;
 
+import com.electricip.loganalyzer.config.IpInfoProperties;
 import com.electricip.loganalyzer.domain.IpInfo;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -34,7 +35,7 @@ class IpInfoClientTest {
     @BeforeEach
     void setUp() {
         circuitBreaker = new IpInfoCircuitBreaker();
-        client = new IpInfoClient(restTemplate, circuitBreaker, "https://ipinfo.io", null);
+        client = new IpInfoClient(restTemplate, circuitBreaker, new IpInfoProperties("https://ipinfo.io", null));
     }
 
     @Nested

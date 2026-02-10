@@ -41,6 +41,9 @@ dependencies {
     // Lombok (보일러플레이트 코드 제거)
     compileOnly("org.projectlombok:lombok")
     annotationProcessor("org.projectlombok:lombok")
+
+    // Configuration Properties 메타데이터 자동 생성
+    annotationProcessor("org.springframework.boot:spring-boot-configuration-processor")
     
     // Test
     testImplementation("org.springframework.boot:spring-boot-starter-test")

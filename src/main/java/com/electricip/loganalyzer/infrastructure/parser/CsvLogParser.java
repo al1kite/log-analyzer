@@ -4,12 +4,12 @@ import com.electricip.loganalyzer.domain.AccessLog;
 import com.electricip.loganalyzer.domain.InvalidCsvFormatException;
 import com.electricip.loganalyzer.domain.ParseError;
 import com.electricip.loganalyzer.domain.ParseStatistics;
+import com.electricip.loganalyzer.config.LogAnalysisProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVRecord;
 import org.apache.commons.io.input.BOMInputStream;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.io.BufferedReader;
@@ -47,8 +47,7 @@ public class CsvLogParser {
             "OriginalRequestUriWithArgs"
     );
 
-    @Value("${log-analysis.max-file-lines:200000}")
-    private final int maxFileLines;
+    private final LogAnalysisProperties properties;
 
     /**
      * CSV 파일 파싱
@@ -83,8 +82,8 @@ public class CsvLogParser {
                 for (CSVRecord record : csvParser) {
                     lineNumber++;
 
-                    if (lineNumber > maxFileLines) {
-                        log.warn("최대 라인 수 도달: {}", maxFileLines);
+                    if (lineNumber > properties.maxFileLines()) {
+                        log.warn("최대 라인 수 도달: {}", properties.maxFileLines());
                         break;
                     }
 
@@ -123,7 +122,8 @@ public class CsvLogParser {
             throw e;
         } catch (Exception e) {
             log.error("CSV 파싱 실패", e);
-            throw new InvalidCsvFormatException("CSV 파일 파싱 실패: " + e.getMessage(), e);
+            var cause = (e.getMessage() != null) ? e.getMessage() : e.getClass().getSimpleName();
+            throw new InvalidCsvFormatException("CSV 파일 파싱 실패: " + cause, e);
         }
     }
 

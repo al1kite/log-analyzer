@@ -72,6 +72,37 @@ class InvalidCsvFormatExceptionTest {
         }
     }
 
+    @Nested
+    @DisplayName("(message, cause) 생성자 검증")
+    class CauseConstructorTest {
+
+        @Test
+        @DisplayName("cause가 getCause()로 노출된다")
+        void shouldExposeCause() {
+            var cause = new RuntimeException("원인 예외");
+            var ex = new InvalidCsvFormatException("파싱 실패", cause);
+
+            assertThat(ex.getCause()).isSameAs(cause);
+            assertThat(ex.getMessage()).isEqualTo("파싱 실패");
+        }
+
+        @Test
+        @DisplayName("missingHeaders가 빈 리스트로 설정된다")
+        void shouldHaveEmptyMissingHeaders() {
+            var ex = new InvalidCsvFormatException("파싱 실패", new RuntimeException());
+
+            assertThat(ex.getMissingHeaders()).isNotNull().isEmpty();
+        }
+
+        @Test
+        @DisplayName("errorCode가 INVALID_CSV_FORMAT이다")
+        void shouldHaveCorrectErrorCode() {
+            var ex = new InvalidCsvFormatException("파싱 실패", new RuntimeException());
+
+            assertThat(ex.getErrorCode()).isEqualTo("INVALID_CSV_FORMAT");
+        }
+    }
+
     @Test
     @DisplayName("LogAnalyzerException을 상속한다")
     void shouldExtendLogAnalyzerException() {

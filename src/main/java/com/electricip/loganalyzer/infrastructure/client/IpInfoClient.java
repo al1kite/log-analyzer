@@ -1,10 +1,10 @@
 package com.electricip.loganalyzer.infrastructure.client;
 
+import com.electricip.loganalyzer.config.IpInfoProperties;
 import com.electricip.loganalyzer.domain.IpInfo;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
@@ -23,12 +23,7 @@ public class IpInfoClient {
 
     private final RestTemplate restTemplate;
     private final IpInfoCircuitBreaker circuitBreaker;
-
-    @Value("${ipinfo.base-url:https://ipinfo.io}")
-    private final String baseUrl;
-
-    @Value("${ipinfo.token:#{null}}")
-    private final String token;
+    private final IpInfoProperties properties;
 
     private static final int MAX_ATTEMPTS = 3;
     private static final long BACKOFF_MS = 1_000;
@@ -141,11 +136,11 @@ public class IpInfoClient {
      * API URL 구성
      */
     private String buildUrl(String ip) {
-        var builder = UriComponentsBuilder.fromHttpUrl(baseUrl)
+        var builder = UriComponentsBuilder.fromHttpUrl(properties.baseUrl())
                 .pathSegment(ip, "json");
 
-        if (token != null && !token.isBlank()) {
-            builder.queryParam("token", token);
+        if (properties.token() != null && !properties.token().isBlank()) {
+            builder.queryParam("token", properties.token());
         }
 
         return builder.build().toUriString();
