@@ -44,6 +44,13 @@ public class AnalysisResult {
         this.parseStatistics = (parseStatistics == null) ? ParseStatistics.empty() : parseStatistics;
     }
 
+    /**
+     * 방어적 복사 — 내부 Map 노출 방지
+     */
+    public Map<String, IpInfo> getIpDetails() {
+        return Map.copyOf(ipDetails);
+    }
+
 
     /**
      * 통계 Value Object

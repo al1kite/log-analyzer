@@ -82,8 +82,6 @@ public class AnalysisController {
             @Parameter(description = "분석 ID", example = "550e8400-e29b-41d4-a716-446655440000")
             @PathVariable String analysisId) {
 
-        Objects.requireNonNull(analysisId, "analysisId는 null일 수 없습니다");
-
         var result = analysisService.getById(analysisId)
                 .orElseThrow(() -> new AnalysisNotFoundException(analysisId));
 
@@ -117,9 +115,7 @@ public class AnalysisController {
     public ResponseEntity<Void> deleteResult(
             @Parameter(description = "분석 ID", example = "550e8400-e29b-41d4-a716-446655440000")
             @PathVariable String analysisId) {
-        
-        Objects.requireNonNull(analysisId, "analysisId는 null일 수 없습니다");
-        
+
         var deleted = analysisService.delete(analysisId);
         return deleted ? ResponseEntity.ok().build() : ResponseEntity.notFound().build();
     }

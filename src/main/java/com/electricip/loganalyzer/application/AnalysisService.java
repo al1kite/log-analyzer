@@ -1,5 +1,6 @@
 package com.electricip.loganalyzer.application;
 
+import com.electricip.loganalyzer.config.LogAnalysisProperties;
 import com.electricip.loganalyzer.domain.AnalysisResult;
 import com.electricip.loganalyzer.domain.IpInfo;
 import com.electricip.loganalyzer.domain.exception.FileTooLargeException;
@@ -12,7 +13,6 @@ import com.electricip.loganalyzer.infrastructure.parser.CsvLogParser;
 import com.electricip.loganalyzer.infrastructure.repository.AnalysisRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -27,14 +27,12 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class AnalysisService {
-    
+
     private final CsvLogParser logParser;
     private final IpInfoClient ipInfoClient;
     private final AnalysisRepository repository;
     private final StatisticsCalculator statisticsCalculator;
-    
-    @Value("${log-analysis.max-file-size-mb:50}")
-    private int maxFileSizeMb;
+    private final LogAnalysisProperties properties;
     
     /**
      * 로그 분석
@@ -99,7 +97,7 @@ public class AnalysisService {
             throw e;
         } catch (Exception e) {
             log.error("분석 실패 (내부 오류): {}", e.getMessage(), e);
-            throw new RuntimeException("로그 분석에 실패했습니다: " + e.getMessage(), e);
+            throw new LogParsingException("로그 분석에 실패했습니다: " + e.getMessage(), e);
         }
     }
 
@@ -125,15 +123,15 @@ public class AnalysisService {
             throw new InvalidFileException("파일이 비어있습니다");
         }
 
-        var maxBytes = maxFileSizeMb * 1024L * 1024L;
+        var maxBytes = properties.maxFileSizeMb() * 1024L * 1024L;
         if (file.getSize() > maxBytes) {
             throw new FileTooLargeException(
-                    String.format("파일 크기 초과 (최대 %dMB)", maxFileSizeMb),
+                    String.format("파일 크기 초과 (최대 %dMB)", properties.maxFileSizeMb()),
                     file.getSize(), maxBytes);
         }
 
         var filename = file.getOriginalFilename();
-        if (filename == null || !filename.toLowerCase().endsWith(".csv")) {
+        if (filename == null || !filename.toLowerCase(Locale.ROOT).endsWith(".csv")) {
             throw new InvalidFileException("CSV 파일만 업로드 가능합니다");
         }
     }

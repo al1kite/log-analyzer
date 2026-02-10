@@ -1,8 +1,9 @@
 package com.electricip.loganalyzer.application;
 
+import com.electricip.loganalyzer.config.LogAnalysisProperties;
 import com.electricip.loganalyzer.domain.AccessLog;
 import com.electricip.loganalyzer.domain.AnalysisResult;
-import org.springframework.beans.factory.annotation.Value;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.util.Collections;
@@ -15,10 +16,10 @@ import java.util.stream.Collectors;
  * 통계 계산기
  */
 @Component
+@RequiredArgsConstructor
 public class StatisticsCalculator {
-    
-    @Value("${log-analysis.top-n-results:10}")
-    private int topN;
+
+    private final LogAnalysisProperties properties;
     
     /**
      * 통계 계산
@@ -114,7 +115,7 @@ public class StatisticsCalculator {
         
         return map.entrySet().stream()
                 .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
-                .limit(topN)
+                .limit(properties.topNResults())
                 .map(e -> new AnalysisResult.TopItem(e.getKey(), e.getValue()))
                 .toList();
     }

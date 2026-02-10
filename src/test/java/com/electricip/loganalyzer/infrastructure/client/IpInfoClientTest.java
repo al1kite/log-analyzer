@@ -1,5 +1,6 @@
 package com.electricip.loganalyzer.infrastructure.client;
 
+import com.electricip.loganalyzer.config.IpInfoProperties;
 import com.electricip.loganalyzer.domain.IpInfo;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -8,7 +9,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.ArrayList;
@@ -35,9 +35,7 @@ class IpInfoClientTest {
     @BeforeEach
     void setUp() {
         circuitBreaker = new IpInfoCircuitBreaker();
-        client = new IpInfoClient(restTemplate, circuitBreaker);
-        ReflectionTestUtils.setField(client, "baseUrl", "https://ipinfo.io");
-        ReflectionTestUtils.setField(client, "token", null);
+        client = new IpInfoClient(restTemplate, circuitBreaker, new IpInfoProperties("https://ipinfo.io", null));
     }
 
     @Nested
@@ -82,7 +80,7 @@ class IpInfoClientTest {
         @Test
         @DisplayName("API 실패 시 Circuit Breaker에 실패가 기록된다")
         void shouldRecordFailureOnApiError() {
-            when(restTemplate.getForObject(anyString(), any(Class.class)))
+            when(restTemplate.getForObject(anyString(), any()))
                     .thenThrow(new IpInfoServerException("서버 오류"));
 
             client.getIpInfo("1.2.3.4");
@@ -99,53 +97,53 @@ class IpInfoClientTest {
         @Test
         @DisplayName("RateLimitExceededException은 재시도하지 않는다")
         void shouldNotRetryOnRateLimit() {
-            when(restTemplate.getForObject(anyString(), any(Class.class)))
+            when(restTemplate.getForObject(anyString(), any()))
                     .thenThrow(new RateLimitExceededException("rate limit"));
 
             var result = client.getIpInfo("1.2.3.4");
 
             assertThat(result.isValid()).isFalse();
             // 1번만 호출 (재시도 없음)
-            verify(restTemplate, times(1)).getForObject(anyString(), any(Class.class));
+            verify(restTemplate, times(1)).getForObject(anyString(), any());
         }
 
         @Test
         @DisplayName("IpInfoAuthException은 재시도하지 않는다")
         void shouldNotRetryOnAuthError() {
-            when(restTemplate.getForObject(anyString(), any(Class.class)))
+            when(restTemplate.getForObject(anyString(), any()))
                     .thenThrow(new IpInfoAuthException("auth failed"));
 
             var result = client.getIpInfo("1.2.3.4");
 
             assertThat(result.isValid()).isFalse();
             // 1번만 호출 (재시도 없음)
-            verify(restTemplate, times(1)).getForObject(anyString(), any(Class.class));
+            verify(restTemplate, times(1)).getForObject(anyString(), any());
         }
 
         @Test
         @DisplayName("일반 예외는 MAX_ATTEMPTS까지 재시도한다")
         void shouldRetryOnGeneralException() {
-            when(restTemplate.getForObject(anyString(), any(Class.class)))
+            when(restTemplate.getForObject(anyString(), any()))
                     .thenThrow(new IpInfoServerException("서버 오류"));
 
             var result = client.getIpInfo("1.2.3.4");
 
             assertThat(result.isValid()).isFalse();
             // 3번 호출 (최초 + 2회 재시도)
-            verify(restTemplate, times(3)).getForObject(anyString(), any(Class.class));
+            verify(restTemplate, times(3)).getForObject(anyString(), any());
         }
 
         @Test
         @DisplayName("null 응답은 MAX_ATTEMPTS까지 재시도하고 실패를 기록한다")
         void shouldRetryAndRecordFailureOnNullResponse() {
-            when(restTemplate.getForObject(anyString(), any(Class.class)))
+            when(restTemplate.getForObject(anyString(), any()))
                     .thenReturn(null);
 
             var result = client.getIpInfo("1.2.3.4");
 
             assertThat(result.isValid()).isFalse();
             // 3번 호출 (최초 + 2회 재시도)
-            verify(restTemplate, times(3)).getForObject(anyString(), any(Class.class));
+            verify(restTemplate, times(3)).getForObject(anyString(), any());
             // 최종 실패 시 1회 기록
             assertThat(circuitBreaker.getFailureCount()).isEqualTo(1);
         }
@@ -153,7 +151,7 @@ class IpInfoClientTest {
         @Test
         @DisplayName("null 응답 반복 시 Circuit Breaker가 열린다")
         void shouldOpenCircuitOnRepeatedNullResponses() {
-            when(restTemplate.getForObject(anyString(), any(Class.class)))
+            when(restTemplate.getForObject(anyString(), any()))
                     .thenReturn(null);
 
             // FAILURE_THRESHOLD(5)회 호출 → 각각 1회 failure 기록
@@ -236,7 +234,7 @@ class IpInfoClientTest {
         @Test
         @DisplayName("여러 스레드에서 동시 실패 시 Circuit Breaker 카운트가 정확하다")
         void concurrentFailures_circuitBreakerCountAccurate() throws InterruptedException {
-            when(restTemplate.getForObject(anyString(), any(Class.class)))
+            when(restTemplate.getForObject(anyString(), any()))
                     .thenThrow(new RateLimitExceededException("rate limit"));
 
             int threadCount = 10;

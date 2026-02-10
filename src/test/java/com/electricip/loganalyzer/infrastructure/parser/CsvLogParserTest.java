@@ -1,12 +1,11 @@
 package com.electricip.loganalyzer.infrastructure.parser;
 
+import com.electricip.loganalyzer.config.LogAnalysisProperties;
 import com.electricip.loganalyzer.domain.InvalidCsvFormatException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
-import org.springframework.test.util.ReflectionTestUtils;
-
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -29,12 +28,11 @@ class CsvLogParserTest {
             "OriginalRequestUriWithArgs");
 
     private static final String VALID_ROW =
-            "1/1/2025, 12:00:00.000 AM,1.2.3.4,GET,/api/test,Mozilla/5.0,200,HTTP/1.1,100,200,0.5,TLSv1.2,/api/test?q=1";
+            "\"1/1/2025, 12:00:00.000 AM\",1.2.3.4,GET,/api/test,Mozilla/5.0,200,HTTP/1.1,100,200,0.5,TLSv1.2,/api/test?q=1";
 
     @BeforeEach
     void setUp() {
-        parser = new CsvLogParser();
-        ReflectionTestUtils.setField(parser, "maxFileLines", 200000);
+        parser = new CsvLogParser(new LogAnalysisProperties(200_000, 10, 50));
     }
 
     private ByteArrayInputStream toStream(String csv) {

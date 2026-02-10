@@ -1,7 +1,6 @@
 package com.electricip.loganalyzer.api;
 
 import com.electricip.loganalyzer.domain.AnalysisResult;
-import com.electricip.loganalyzer.domain.ParseError;
 import com.electricip.loganalyzer.domain.ParseStatistics;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;

@@ -7,7 +7,6 @@ import com.github.benmanes.caffeine.cache.RemovalCause;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Repository;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -70,7 +69,7 @@ public class AnalysisRepository {
      * 전체 조회
      */
     public List<AnalysisResult> findAll() {
-        return new ArrayList<>(storage.asMap().values());
+        return List.copyOf(storage.asMap().values());
     }
 
     /**

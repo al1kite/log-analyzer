@@ -1,0 +1,46 @@
+package com.electricip.loganalyzer;
+
+import com.electricip.loganalyzer.config.IpInfoProperties;
+import com.electricip.loganalyzer.config.LogAnalysisProperties;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.TestPropertySource;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * {@code @ConfigurationProperties} 바인딩 검증 테스트.
+ *
+ * <p>프로퍼티 record가 Spring 컨텍스트에 정상 등록되고,
+ * 값이 올바르게 바인딩되는지 확인한다.</p>
+ */
+@SpringBootTest
+@TestPropertySource(properties = {
+        "log-analysis.max-file-lines=99999",
+        "log-analysis.top-n-results=7",
+        "log-analysis.max-file-size-mb=25",
+        "ipinfo.base-url=https://test.ipinfo.io",
+        "ipinfo.token=test-token"
+})
+class ConfigurationPropertiesBindingTest {
+
+    @Autowired private LogAnalysisProperties logAnalysisProperties;
+    @Autowired private IpInfoProperties ipInfoProperties;
+
+    @Test
+    @DisplayName("LogAnalysisProperties가 @TestPropertySource 값으로 바인딩된다")
+    void logAnalysisProperties_areBound() {
+        assertThat(logAnalysisProperties.maxFileLines()).isEqualTo(99_999);
+        assertThat(logAnalysisProperties.topNResults()).isEqualTo(7);
+        assertThat(logAnalysisProperties.maxFileSizeMb()).isEqualTo(25);
+    }
+
+    @Test
+    @DisplayName("IpInfoProperties가 @TestPropertySource 값으로 바인딩된다")
+    void ipInfoProperties_areBound() {
+        assertThat(ipInfoProperties.baseUrl()).isEqualTo("https://test.ipinfo.io");
+        assertThat(ipInfoProperties.token()).isEqualTo("test-token");
+    }
+}

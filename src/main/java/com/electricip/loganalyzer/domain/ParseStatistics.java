@@ -34,6 +34,17 @@ public record ParseStatistics(
     }
 
     /**
+     * 방어적 복사 — 내부 컬렉션 노출 방지
+     */
+    public Map<String, Integer> errorsByType() {
+        return Map.copyOf(errorsByType);
+    }
+
+    public List<ParseError> errorSamples() {
+        return List.copyOf(errorSamples);
+    }
+
+    /**
      * 빈 ParseStatistics 팩터리 메서드
      */
     public static ParseStatistics empty() {
