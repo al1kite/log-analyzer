@@ -15,6 +15,9 @@ import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
@@ -246,6 +249,68 @@ public class GlobalExceptionHandler {
                         HttpStatus.PAYLOAD_TOO_LARGE,
                         "FILE_TOO_LARGE",
                         message,
+                        request.getRequestURI()
+                ));
+    }
+
+    /**
+     * 요청 본문 검증 실패 (@Valid) → 400
+     */
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<ErrorResponse> handleMethodArgumentNotValid(
+            MethodArgumentNotValidException e, HttpServletRequest request) {
+
+        var fieldError = e.getBindingResult().getFieldError();
+        var message = (fieldError != null)
+                ? fieldError.getField() + ": " + fieldError.getDefaultMessage()
+                : e.getMessage();
+
+        log.error("요청 검증 실패: {}", message);
+
+        return ResponseEntity
+                .badRequest()
+                .body(ErrorResponse.of(
+                        HttpStatus.BAD_REQUEST,
+                        "VALIDATION_ERROR",
+                        message,
+                        request.getRequestURI()
+                ));
+    }
+
+    /**
+     * 요청 본문 파싱 실패 (잘못된 JSON 등) → 400
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorResponse> handleHttpMessageNotReadable(
+            HttpMessageNotReadableException e, HttpServletRequest request) {
+
+        log.error("요청 본문 파싱 실패: {}", e.getMessage());
+
+        return ResponseEntity
+                .badRequest()
+                .body(ErrorResponse.of(
+                        HttpStatus.BAD_REQUEST,
+                        "INVALID_REQUEST_BODY",
+                        "요청 본문을 읽을 수 없습니다",
+                        request.getRequestURI()
+                ));
+    }
+
+    /**
+     * 필수 요청 파라미터 누락 → 400
+     */
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<ErrorResponse> handleMissingServletRequestParameter(
+            MissingServletRequestParameterException e, HttpServletRequest request) {
+
+        log.error("필수 파라미터 누락: {}", e.getParameterName());
+
+        return ResponseEntity
+                .badRequest()
+                .body(ErrorResponse.of(
+                        HttpStatus.BAD_REQUEST,
+                        "MISSING_PARAMETER",
+                        e.getMessage(),
                         request.getRequestURI()
                 ));
     }

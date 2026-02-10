@@ -27,14 +27,14 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class AnalysisService {
-    
+
     private final CsvLogParser logParser;
     private final IpInfoClient ipInfoClient;
     private final AnalysisRepository repository;
     private final StatisticsCalculator statisticsCalculator;
-    
+
     @Value("${log-analysis.max-file-size-mb:50}")
-    private int maxFileSizeMb;
+    private final int maxFileSizeMb;
     
     /**
      * 로그 분석
@@ -99,7 +99,7 @@ public class AnalysisService {
             throw e;
         } catch (Exception e) {
             log.error("분석 실패 (내부 오류): {}", e.getMessage(), e);
-            throw new RuntimeException("로그 분석에 실패했습니다: " + e.getMessage(), e);
+            throw new LogParsingException("로그 분석에 실패했습니다: " + e.getMessage(), e);
         }
     }
 
@@ -133,7 +133,7 @@ public class AnalysisService {
         }
 
         var filename = file.getOriginalFilename();
-        if (filename == null || !filename.toLowerCase().endsWith(".csv")) {
+        if (filename == null || !filename.toLowerCase(Locale.ROOT).endsWith(".csv")) {
             throw new InvalidFileException("CSV 파일만 업로드 가능합니다");
         }
     }

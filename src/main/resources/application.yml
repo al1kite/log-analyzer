@@ -17,7 +17,7 @@ spring:
 # ipinfo API
 ipinfo:
   base-url: https://ipinfo.io
-  token: ${IPINFO_TOKEN:eac7f9bfec8ddb}
+  token: ${IPINFO_TOKEN:}
 
 # 로그 분석 설정
 log-analysis:

@@ -4,6 +4,7 @@ import com.electricip.loganalyzer.domain.AccessLog;
 import com.electricip.loganalyzer.domain.InvalidCsvFormatException;
 import com.electricip.loganalyzer.domain.ParseError;
 import com.electricip.loganalyzer.domain.ParseStatistics;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVRecord;
@@ -25,6 +26,7 @@ import java.util.*;
  */
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class CsvLogParser {
 
     private static final DateTimeFormatter FORMATTER =
@@ -46,7 +48,7 @@ public class CsvLogParser {
     );
 
     @Value("${log-analysis.max-file-lines:200000}")
-    private int maxFileLines;
+    private final int maxFileLines;
 
     /**
      * CSV 파일 파싱
@@ -66,7 +68,7 @@ public class CsvLogParser {
         var lineNumber = 0;
 
         try (var reader = new BufferedReader(
-                new InputStreamReader(new BOMInputStream(inputStream), StandardCharsets.UTF_8))) {
+                new InputStreamReader(BOMInputStream.builder().setInputStream(inputStream).get(), StandardCharsets.UTF_8))) {
 
             var csvFormat = CSVFormat.DEFAULT.builder()
                     .setHeader()
@@ -95,9 +97,12 @@ public class CsvLogParser {
                         errorsByType.merge(errorType.name(), 1, Integer::sum);
 
                         if (errorSamples.size() < ParseStatistics.MAX_ERROR_SAMPLES) {
+                            var message = (e.getMessage() != null)
+                                    ? e.getMessage()
+                                    : e.getClass().getSimpleName();
                             errorSamples.add(new ParseError(
                                     lineNumber,
-                                    e.getMessage(),
+                                    message,
                                     errorType,
                                     LocalDateTime.now()
                             ));
@@ -118,7 +123,7 @@ public class CsvLogParser {
             throw e;
         } catch (Exception e) {
             log.error("CSV 파싱 실패", e);
-            throw new InvalidCsvFormatException("CSV 파일 파싱 실패: " + e.getMessage());
+            throw new InvalidCsvFormatException("CSV 파일 파싱 실패: " + e.getMessage(), e);
         }
     }
 
@@ -127,11 +132,11 @@ public class CsvLogParser {
      */
     private void validateHeaders(Map<String, Integer> headerMap) {
         var actualHeaders = headerMap.keySet().stream()
-                .map(String::toLowerCase)
+                .map(h -> h.toLowerCase(Locale.ROOT))
                 .collect(java.util.stream.Collectors.toSet());
 
         var missingHeaders = REQUIRED_HEADERS.stream()
-                .filter(required -> !actualHeaders.contains(required.toLowerCase()))
+                .filter(required -> !actualHeaders.contains(required.toLowerCase(Locale.ROOT)))
                 .sorted()
                 .toList();
 

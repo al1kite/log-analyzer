@@ -2,6 +2,7 @@ package com.electricip.loganalyzer.application;
 
 import com.electricip.loganalyzer.domain.AccessLog;
 import com.electricip.loganalyzer.domain.AnalysisResult;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -15,10 +16,11 @@ import java.util.stream.Collectors;
  * 통계 계산기
  */
 @Component
+@RequiredArgsConstructor
 public class StatisticsCalculator {
-    
+
     @Value("${log-analysis.top-n-results:10}")
-    private int topN;
+    private final int topN;
     
     /**
      * 통계 계산

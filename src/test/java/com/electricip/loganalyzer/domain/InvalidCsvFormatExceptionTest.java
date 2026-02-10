@@ -11,6 +11,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+@SuppressWarnings("ThrowableNotThrown")
 class InvalidCsvFormatExceptionTest {
 
     @Nested
@@ -39,7 +40,7 @@ class InvalidCsvFormatExceptionTest {
         @Test
         @DisplayName("null missingHeaders는 빈 리스트로 처리된다")
         void shouldHandleNullMissingHeaders() {
-            var ex = new InvalidCsvFormatException("message", null);
+            var ex = new InvalidCsvFormatException("message", (List<String>) null);
 
             assertThat(ex.getMissingHeaders()).isNotNull().isEmpty();
         }

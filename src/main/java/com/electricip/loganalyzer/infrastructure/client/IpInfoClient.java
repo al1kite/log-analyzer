@@ -24,14 +24,14 @@ public class IpInfoClient {
     private final RestTemplate restTemplate;
     private final IpInfoCircuitBreaker circuitBreaker;
 
-    private static final int MAX_ATTEMPTS = 3;
-    private static final long BACKOFF_MS = 1_000;
-
     @Value("${ipinfo.base-url:https://ipinfo.io}")
-    private String baseUrl;
+    private final String baseUrl;
 
     @Value("${ipinfo.token:#{null}}")
-    private String token;
+    private final String token;
+
+    private static final int MAX_ATTEMPTS = 3;
+    private static final long BACKOFF_MS = 1_000;
 
     /**
      * IP 정보 조회 (캐싱 적용)
