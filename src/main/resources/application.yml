@@ -24,6 +24,7 @@ log-analysis:
   max-file-lines: 200000
   max-file-size-mb: 50
   top-n-results: 10
+  ip-enrichment-timeout-seconds: 5
 
 # 로깅
 logging:

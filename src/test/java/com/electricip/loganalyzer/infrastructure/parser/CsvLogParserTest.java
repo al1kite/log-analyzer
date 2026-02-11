@@ -32,7 +32,7 @@ class CsvLogParserTest {
 
     @BeforeEach
     void setUp() {
-        parser = new CsvLogParser(new LogAnalysisProperties(200_000, 10, 50));
+        parser = new CsvLogParser(new LogAnalysisProperties(200_000, 10, 50, 5));
     }
 
     private ByteArrayInputStream toStream(String csv) {

@@ -1,6 +1,7 @@
 package com.electricip.loganalyzer.infrastructure.repository;
 
 import com.electricip.loganalyzer.domain.AnalysisResult;
+import com.electricip.loganalyzer.domain.exception.DuplicateAnalysisIdException;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.RemovalCause;
@@ -47,9 +48,15 @@ public class AnalysisRepository {
 
     /**
      * 저장
+     *
+     * @throws DuplicateAnalysisIdException 동일 ID가 이미 존재하는 경우
      */
     public void save(AnalysisResult result) {
         Objects.requireNonNull(result, "result는 null일 수 없습니다");
+
+        if (storage.getIfPresent(result.getAnalysisId()) != null) {
+            throw new DuplicateAnalysisIdException(result.getAnalysisId());
+        }
 
         storage.put(result.getAnalysisId(), result);
 
@@ -84,8 +91,8 @@ public class AnalysisRepository {
     /**
      * 개수 조회
      */
-    public int count() {
-        return storage.asMap().size();
+    public long count() {
+        return storage.estimatedSize();
     }
 
     /**
