@@ -29,19 +29,12 @@ public record ParseStatistics(
         if (errorCount < 0) {
             throw new IllegalArgumentException("errorCount는 음수일 수 없습니다");
         }
+        if (successCount + errorCount > totalLines) {
+            throw new IllegalArgumentException(
+                    "successCount + errorCount는 totalLines를 초과할 수 없습니다");
+        }
         errorsByType = (errorsByType != null) ? Map.copyOf(errorsByType) : Map.of();
         errorSamples = (errorSamples != null) ? List.copyOf(errorSamples) : List.of();
-    }
-
-    /**
-     * 방어적 복사 — 내부 컬렉션 노출 방지
-     */
-    public Map<String, Integer> errorsByType() {
-        return Map.copyOf(errorsByType);
-    }
-
-    public List<ParseError> errorSamples() {
-        return List.copyOf(errorSamples);
     }
 
     /**

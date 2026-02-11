@@ -1,7 +1,6 @@
 package com.electricip.loganalyzer.domain;
 
 import java.time.LocalDateTime;
-import java.util.Objects;
 
 /**
  * 접속 로그 도메인 모델
@@ -39,6 +38,7 @@ public record AccessLog(
      */
     public String statusCategory() {
         if (httpStatus == null) return "Unknown";
+        if (httpStatus >= 100 && httpStatus < 200) return "1xx";
         if (httpStatus >= 200 && httpStatus < 300) return "2xx";
         if (httpStatus >= 300 && httpStatus < 400) return "3xx";
         if (httpStatus >= 400 && httpStatus < 500) return "4xx";

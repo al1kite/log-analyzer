@@ -112,8 +112,14 @@ class AccessLogTest {
             assertThat(createLog(null).statusCategory()).isEqualTo("Unknown");
         }
 
+        @ParameterizedTest(name = "상태 코드 {0}은 1xx 카테고리이다")
+        @ValueSource(ints = {100, 199})
+        void shouldReturn1xx_whenStatusIs100to199(int status) {
+            assertThat(createLog(status).statusCategory()).isEqualTo("1xx");
+        }
+
         @ParameterizedTest(name = "상태 코드 {0}은 Unknown 카테고리이다")
-        @ValueSource(ints = {0, 100, 199, 600, 999})
+        @ValueSource(ints = {0, 600, 999})
         void shouldReturnUnknown_whenStatusIsOutOfRange(int status) {
             assertThat(createLog(status).statusCategory()).isEqualTo("Unknown");
         }
