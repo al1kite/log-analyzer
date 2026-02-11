@@ -1,6 +1,7 @@
 package com.electricip.loganalyzer.infrastructure.repository;
 
 import com.electricip.loganalyzer.domain.AnalysisResult;
+import com.electricip.loganalyzer.domain.exception.DuplicateAnalysisIdException;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import org.junit.jupiter.api.BeforeEach;
@@ -57,10 +58,13 @@ class AnalysisRepositoryTest {
         }
 
         @Test
-        @DisplayName("같은 ID로 저장하면 덮어쓴다")
-        void shouldOverwriteSameId() {
+        @DisplayName("같은 ID로 저장하면 DuplicateAnalysisIdException 발생")
+        void shouldThrowForDuplicateId() {
             repository.save(createResult("test-1"));
-            repository.save(createResult("test-1"));
+
+            assertThatThrownBy(() -> repository.save(createResult("test-1")))
+                    .isInstanceOf(DuplicateAnalysisIdException.class)
+                    .hasMessageContaining("test-1");
 
             assertThat(repository.count()).isEqualTo(1);
         }

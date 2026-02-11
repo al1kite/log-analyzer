@@ -21,6 +21,7 @@ import static org.assertj.core.api.Assertions.assertThat;
         "log-analysis.max-file-lines=99999",
         "log-analysis.top-n-results=7",
         "log-analysis.max-file-size-mb=25",
+        "log-analysis.ip-enrichment-timeout-seconds=3",
         "ipinfo.base-url=https://test.ipinfo.io",
         "ipinfo.token=test-token"
 })
@@ -35,6 +36,7 @@ class ConfigurationPropertiesBindingTest {
         assertThat(logAnalysisProperties.maxFileLines()).isEqualTo(99_999);
         assertThat(logAnalysisProperties.topNResults()).isEqualTo(7);
         assertThat(logAnalysisProperties.maxFileSizeMb()).isEqualTo(25);
+        assertThat(logAnalysisProperties.ipEnrichmentTimeoutSeconds()).isEqualTo(3);
     }
 
     @Test
