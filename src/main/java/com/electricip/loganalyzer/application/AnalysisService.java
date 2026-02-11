@@ -19,10 +19,8 @@ import org.springframework.web.multipart.MultipartFile;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
 /**
@@ -160,26 +158,21 @@ public class AnalysisService {
             return Collections.emptyMap();
         }
 
+        var timeout = properties.ipEnrichmentTimeoutSeconds();
+
         var futures = ips.stream()
                 .collect(Collectors.toMap(
                         ip -> ip,
                         ip -> CompletableFuture.supplyAsync(
                                 () -> fetchIpInfoSafely(ip),
                                 ipEnrichmentExecutor
-                        )
+                        ).completeOnTimeout(IpInfo.unknown(ip), timeout, TimeUnit.SECONDS)
                 ));
 
-        var allOf = CompletableFuture.allOf(futures.values().toArray(new CompletableFuture[0]));
         try {
-            allOf.get(properties.ipEnrichmentTimeoutSeconds(), TimeUnit.SECONDS);
-        } catch (TimeoutException e) {
-            log.warn("IP enrichment 타임아웃 ({}초), 완료된 결과만 반환",
-                    properties.ipEnrichmentTimeoutSeconds());
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            log.warn("IP enrichment 인터럽트");
-        } catch (ExecutionException e) {
-            log.error("IP enrichment 실패", e.getCause());
+            CompletableFuture.allOf(futures.values().toArray(new CompletableFuture[0])).join();
+        } catch (Exception e) {
+            log.warn("IP enrichment 중 예외 발생, 완료된 결과만 반환", e);
         }
 
         return futures.entrySet().stream()

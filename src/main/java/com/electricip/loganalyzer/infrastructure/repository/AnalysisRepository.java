@@ -54,13 +54,12 @@ public class AnalysisRepository {
     public void save(AnalysisResult result) {
         Objects.requireNonNull(result, "result는 null일 수 없습니다");
 
-        if (storage.getIfPresent(result.getAnalysisId()) != null) {
+        var existing = storage.asMap().putIfAbsent(result.getAnalysisId(), result);
+        if (existing != null) {
             throw new DuplicateAnalysisIdException(result.getAnalysisId());
         }
 
-        storage.put(result.getAnalysisId(), result);
-
-        log.debug("저장 완료: id={}, cacheSize={}", result.getAnalysisId(), storage.estimatedSize());
+        log.debug("저장 완료: id={}, cacheSize={}", result.getAnalysisId(), storage.asMap().size());
     }
 
     /**
@@ -92,7 +91,7 @@ public class AnalysisRepository {
      * 개수 조회
      */
     public long count() {
-        return storage.estimatedSize();
+        return storage.asMap().size();
     }
 
     /**

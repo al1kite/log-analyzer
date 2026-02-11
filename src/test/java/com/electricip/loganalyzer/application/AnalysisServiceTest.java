@@ -5,6 +5,7 @@ import com.electricip.loganalyzer.domain.*;
 import com.electricip.loganalyzer.infrastructure.client.IpInfoClient;
 import com.electricip.loganalyzer.infrastructure.parser.CsvLogParser;
 import com.electricip.loganalyzer.infrastructure.repository.AnalysisRepository;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -18,7 +19,10 @@ import java.io.ByteArrayInputStream;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -35,14 +39,20 @@ class AnalysisServiceTest {
     @Mock private StatisticsCalculator statisticsCalculator;
 
     private AnalysisService service;
+    private ExecutorService executor;
 
     @BeforeEach
     void setUp() {
         var properties = new LogAnalysisProperties(200_000, 10, 50, 5);
-        var executor = Executors.newVirtualThreadPerTaskExecutor();
+        executor = Executors.newVirtualThreadPerTaskExecutor();
         service = new AnalysisService(
                 logParser, ipInfoClient, repository,
                 statisticsCalculator, properties, executor);
+    }
+
+    @AfterEach
+    void tearDown() {
+        executor.close();
     }
 
     private CsvLogParser.ParseResult createParseResult(int logCount) {
@@ -107,29 +117,30 @@ class AnalysisServiceTest {
         }
 
         @Test
-        @DisplayName("병렬 처리가 순차보다 빠르다")
-        void shouldBeFasterThanSequential() throws Exception {
+        @DisplayName("IP 조회가 병렬로 실행된다")
+        void shouldRunConcurrently() throws Exception {
             var file = mockFile();
             var topIps = List.of(
                     new AnalysisResult.TopItem("1.1.1.1", 100),
                     new AnalysisResult.TopItem("2.2.2.2", 50),
                     new AnalysisResult.TopItem("3.3.3.3", 25));
 
+            // 3개 스레드가 모두 도착해야 통과하는 배리어
+            var barrier = new CountDownLatch(3);
+
             when(logParser.parse(any())).thenReturn(createParseResult(3));
             when(statisticsCalculator.calculate(any())).thenReturn(createStats(topIps));
             when(ipInfoClient.getIpInfo(anyString())).thenAnswer(inv -> {
-                Thread.sleep(200);
+                barrier.countDown();
+                // 순차 실행이면 여기서 영원히 대기 (3개가 동시에 도착해야 통과)
+                assertThat(barrier.await(3, TimeUnit.SECONDS)).isTrue();
                 String ip = inv.getArgument(0);
                 return IpInfo.of(ip, "KR", "Seoul", "Seoul", "ISP");
             });
 
-            long start = System.currentTimeMillis();
             var result = service.analyze(file);
-            long elapsed = System.currentTimeMillis() - start;
 
             assertThat(result.getIpDetails()).hasSize(3);
-            // 순차: 3 × 200ms = 600ms, 병렬: ~200ms
-            assertThat(elapsed).isLessThan(500);
         }
     }
 
