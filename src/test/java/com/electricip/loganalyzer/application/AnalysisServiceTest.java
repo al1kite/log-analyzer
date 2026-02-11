@@ -15,6 +15,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.electricip.loganalyzer.domain.exception.InvalidFileException;
+
 import java.io.ByteArrayInputStream;
 import java.util.Collections;
 import java.util.List;
@@ -26,6 +28,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
@@ -43,7 +46,7 @@ class AnalysisServiceTest {
 
     @BeforeEach
     void setUp() {
-        var properties = new LogAnalysisProperties(200_000, 10, 50, 5);
+        var properties = new LogAnalysisProperties(200_000, 10, 50, 5, null);
         executor = Executors.newVirtualThreadPerTaskExecutor();
         service = new AnalysisService(
                 logParser, ipInfoClient, repository,
@@ -81,11 +84,16 @@ class AnalysisServiceTest {
     }
 
     private MultipartFile mockFile() throws Exception {
+        return mockFile("test.csv", "text/csv", "header1,header2\nval1,val2".getBytes());
+    }
+
+    private MultipartFile mockFile(String filename, String contentType, byte[] content) throws Exception {
         var file = mock(MultipartFile.class);
-        when(file.isEmpty()).thenReturn(false);
-        when(file.getSize()).thenReturn(100L);
-        when(file.getOriginalFilename()).thenReturn("test.csv");
-        when(file.getInputStream()).thenReturn(new ByteArrayInputStream(new byte[0]));
+        lenient().when(file.isEmpty()).thenReturn(false);
+        lenient().when(file.getSize()).thenReturn((long) content.length);
+        lenient().when(file.getOriginalFilename()).thenReturn(filename);
+        lenient().when(file.getContentType()).thenReturn(contentType);
+        lenient().when(file.getInputStream()).thenAnswer(inv -> new ByteArrayInputStream(content));
         return file;
     }
 
@@ -167,6 +175,118 @@ class AnalysisServiceTest {
             assertThat(result.getIpDetails()).containsKey("1.1.1.1");
             // blank IP에 대해 getIpInfo가 호출되지 않아야 함
             verify(ipInfoClient, never()).getIpInfo("");
+        }
+    }
+
+    @Nested
+    @DisplayName("파일 업로드 보안 검증")
+    class FileUploadSecurityTest {
+
+        @Test
+        @DisplayName("Path Traversal 파일명은 거부된다")
+        void shouldRejectPathTraversal() throws Exception {
+            var file = mockFile("../../etc/passwd.csv", "text/csv", "data".getBytes());
+            assertThatThrownBy(() -> service.analyze(file))
+                    .isInstanceOf(InvalidFileException.class)
+                    .hasMessageContaining("잘못된 파일 이름");
+        }
+
+        @Test
+        @DisplayName("백슬래시 Path Traversal도 거부된다")
+        void shouldRejectBackslashTraversal() throws Exception {
+            var file = mockFile("..\\..\\etc\\passwd.csv", "text/csv", "data".getBytes());
+            assertThatThrownBy(() -> service.analyze(file))
+                    .isInstanceOf(InvalidFileException.class)
+                    .hasMessageContaining("잘못된 파일 이름");
+        }
+
+        @Test
+        @DisplayName("CRLF 인젝션 파일명은 거부된다")
+        void shouldRejectCrlfInjection() throws Exception {
+            var file = mockFile("test\r\ninjected.csv", "text/csv", "data".getBytes());
+            assertThatThrownBy(() -> service.analyze(file))
+                    .isInstanceOf(InvalidFileException.class)
+                    .hasMessageContaining("잘못된 파일 이름");
+        }
+
+        @Test
+        @DisplayName("255자 초과 파일명은 거부된다")
+        void shouldRejectLongFileName() throws Exception {
+            var longName = "a".repeat(252) + ".csv";
+            var file = mockFile(longName, "text/csv", "data".getBytes());
+            assertThatThrownBy(() -> service.analyze(file))
+                    .isInstanceOf(InvalidFileException.class)
+                    .hasMessageContaining("너무 깁니다");
+        }
+
+        @Test
+        @DisplayName("허용되지 않은 Content-Type은 거부된다")
+        void shouldRejectDisallowedContentType() throws Exception {
+            var file = mockFile("test.csv", "application/javascript", "data".getBytes());
+            assertThatThrownBy(() -> service.analyze(file))
+                    .isInstanceOf(InvalidFileException.class)
+                    .hasMessageContaining("허용되지 않은 파일 타입");
+        }
+
+        @Test
+        @DisplayName("null Content-Type은 허용된다")
+        void shouldAllowNullContentType() throws Exception {
+            var file = mockFile("test.csv", null, "data".getBytes());
+            when(logParser.parse(any())).thenReturn(createParseResult(1));
+            when(statisticsCalculator.calculate(any())).thenReturn(createStats(List.of()));
+
+            var result = service.analyze(file);
+            assertThat(result).isNotNull();
+        }
+
+        @Test
+        @DisplayName("ZIP 파일은 거부된다")
+        void shouldRejectZipFile() throws Exception {
+            var zipContent = new byte[]{0x50, 0x4B, 0x03, 0x04, 0x00};
+            var file = mockFile("data.csv", "text/csv", zipContent);
+            assertThatThrownBy(() -> service.analyze(file))
+                    .isInstanceOf(InvalidFileException.class)
+                    .hasMessageContaining("압축 파일");
+        }
+
+        @Test
+        @DisplayName("GZIP 파일은 거부된다")
+        void shouldRejectGzipFile() throws Exception {
+            var gzipContent = new byte[]{0x1F, (byte) 0x8B, 0x08, 0x00, 0x00};
+            var file = mockFile("data.csv", "text/csv", gzipContent);
+            assertThatThrownBy(() -> service.analyze(file))
+                    .isInstanceOf(InvalidFileException.class)
+                    .hasMessageContaining("압축 파일");
+        }
+
+        @Test
+        @DisplayName("바이너리 파일(NULL 바이트 포함)은 거부된다")
+        void shouldRejectBinaryFile() throws Exception {
+            var binaryContent = new byte[]{0x48, 0x65, 0x6C, 0x00, 0x6F};
+            var file = mockFile("data.csv", "text/csv", binaryContent);
+            assertThatThrownBy(() -> service.analyze(file))
+                    .isInstanceOf(InvalidFileException.class)
+                    .hasMessageContaining("바이너리");
+        }
+
+        @Test
+        @DisplayName("CSV 확장자가 아닌 파일은 거부된다")
+        void shouldRejectNonCsvExtension() throws Exception {
+            var file = mockFile("malware.exe", "text/csv", "data".getBytes());
+            assertThatThrownBy(() -> service.analyze(file))
+                    .isInstanceOf(InvalidFileException.class)
+                    .hasMessageContaining("CSV");
+        }
+
+        @Test
+        @DisplayName("이중 확장자여도 .csv로 끝나면 통과한다")
+        void shouldAllowDoubleExtensionEndingWithCsv() throws Exception {
+            var file = mockFile("data.txt.csv", "text/csv", "data".getBytes());
+            when(logParser.parse(any())).thenReturn(createParseResult(1));
+            when(statisticsCalculator.calculate(any())).thenReturn(createStats(List.of()));
+
+            var result = service.analyze(file);
+            assertThat(result).isNotNull();
         }
     }
 

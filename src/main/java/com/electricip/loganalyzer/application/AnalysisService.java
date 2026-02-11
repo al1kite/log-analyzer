@@ -16,6 +16,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -134,9 +136,73 @@ public class AnalysisService {
                     file.getSize(), maxBytes);
         }
 
-        var filename = file.getOriginalFilename();
-        if (filename == null || !filename.toLowerCase(Locale.ROOT).endsWith(".csv")) {
+        validateFileName(file.getOriginalFilename());
+        validateContentType(file.getContentType());
+        validateFileContent(file);
+    }
+
+    private void validateFileName(String filename) {
+        if (filename == null || filename.isBlank()) {
+            throw new InvalidFileException("파일 이름이 없습니다");
+        }
+
+        // Path Traversal 방지
+        if (filename.contains("..") || filename.contains("/") || filename.contains("\\")) {
+            throw new InvalidFileException("잘못된 파일 이름");
+        }
+
+        // CRLF 인젝션 방지
+        if (filename.contains("\r") || filename.contains("\n")) {
+            throw new InvalidFileException("잘못된 파일 이름");
+        }
+
+        // 파일 이름 길이 제한
+        if (filename.length() > 255) {
+            throw new InvalidFileException("파일 이름이 너무 깁니다 (최대 255자)");
+        }
+
+        // 확장자 검증
+        if (!filename.toLowerCase(Locale.ROOT).endsWith(".csv")) {
             throw new InvalidFileException("CSV 파일만 업로드 가능합니다");
+        }
+    }
+
+    private void validateContentType(String contentType) {
+        if (contentType != null && !properties.allowedContentTypeSet().contains(contentType.toLowerCase(Locale.ROOT))) {
+            throw new InvalidFileException("허용되지 않은 파일 타입: " + contentType);
+        }
+    }
+
+    private void validateFileContent(MultipartFile file) {
+        try (var is = file.getInputStream()) {
+            var header = new byte[512];
+            var bytesRead = is.read(header);
+
+            if (bytesRead <= 0) {
+                return;
+            }
+
+            // ZIP (PK) / GZIP 매직 넘버 차단
+            if (bytesRead >= 2) {
+                if (header[0] == 0x50 && header[1] == 0x4B) {
+                    throw new InvalidFileException("압축 파일은 업로드할 수 없습니다");
+                }
+                if (header[0] == 0x1F && header[1] == (byte) 0x8B) {
+                    throw new InvalidFileException("압축 파일은 업로드할 수 없습니다");
+                }
+            }
+
+            // 바이너리 파일 감지 (NULL 바이트, 제어 문자)
+            for (int i = 0; i < bytesRead; i++) {
+                byte b = header[i];
+                if (b == 0) {
+                    throw new InvalidFileException("바이너리 파일은 업로드할 수 없습니다");
+                }
+            }
+        } catch (InvalidFileException e) {
+            throw e;
+        } catch (IOException e) {
+            throw new InvalidFileException("파일 읽기 실패: " + e.getMessage());
         }
     }
     
