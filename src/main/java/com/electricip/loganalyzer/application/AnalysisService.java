@@ -18,6 +18,11 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
 /**
@@ -33,6 +38,7 @@ public class AnalysisService {
     private final AnalysisRepository repository;
     private final StatisticsCalculator statisticsCalculator;
     private final LogAnalysisProperties properties;
+    private final Executor ipEnrichmentExecutor;
     
     /**
      * 로그 분석
@@ -137,26 +143,59 @@ public class AnalysisService {
     }
     
     /**
-     * IP 정보 enrichment
+     * IP 정보 병렬 enrichment (CompletableFuture + 전용 스레드 풀)
      */
     private Map<String, IpInfo> enrichIpInfo(List<AnalysisResult.TopItem> topIps) {
         if (topIps.isEmpty()) {
             return Collections.emptyMap();
         }
-        
-        return topIps.stream()
+
+        var ips = topIps.stream()
                 .map(AnalysisResult.TopItem::item)
+                .filter(ip -> ip != null && !ip.isBlank())
                 .distinct()
+                .toList();
+
+        if (ips.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        var futures = ips.stream()
                 .collect(Collectors.toMap(
                         ip -> ip,
-                        ip -> {
-                            try {
-                                return ipInfoClient.getIpInfo(ip);
-                            } catch (Exception e) {
-                                log.warn("IP 정보 조회 실패: ip={}", ip);
-                                return IpInfo.unknown(ip);
-                            }
-                        }
+                        ip -> CompletableFuture.supplyAsync(
+                                () -> fetchIpInfoSafely(ip),
+                                ipEnrichmentExecutor
+                        )
                 ));
+
+        var allOf = CompletableFuture.allOf(futures.values().toArray(new CompletableFuture[0]));
+        try {
+            allOf.get(properties.ipEnrichmentTimeoutSeconds(), TimeUnit.SECONDS);
+        } catch (TimeoutException e) {
+            log.warn("IP enrichment 타임아웃 ({}초), 완료된 결과만 반환",
+                    properties.ipEnrichmentTimeoutSeconds());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.warn("IP enrichment 인터럽트");
+        } catch (ExecutionException e) {
+            log.error("IP enrichment 실패", e.getCause());
+        }
+
+        return futures.entrySet().stream()
+                .filter(entry -> entry.getValue().isDone() && !entry.getValue().isCompletedExceptionally())
+                .collect(Collectors.toMap(
+                        Map.Entry::getKey,
+                        entry -> entry.getValue().join()
+                ));
+    }
+
+    private IpInfo fetchIpInfoSafely(String ip) {
+        try {
+            return ipInfoClient.getIpInfo(ip);
+        } catch (Exception e) {
+            log.warn("IP 정보 조회 실패: ip={}, error={}", ip, e.getMessage());
+            return IpInfo.unknown(ip);
+        }
     }
 }
