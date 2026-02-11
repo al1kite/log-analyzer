@@ -7,10 +7,10 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.stream.Collectors;
 
 /**
  * 통계 계산기
@@ -34,71 +34,56 @@ public class StatisticsCalculator {
         if (logs.isEmpty()) {
             return createEmptyStatistics();
         }
-        
-        // 상태 코드별 카운트
-        var statusCounts = logs.stream()
-                .collect(Collectors.groupingBy(
-                        AccessLog::statusCategory,
-                        Collectors.counting()));
-        
-        // 상위 N개 Path
-        var topPaths = calculateTopN(logs.stream()
-                .filter(log -> log.requestUri() != null)
-                .collect(Collectors.groupingBy(
-                        AccessLog::requestUri,
-                        Collectors.counting())));
-        
-        // 상위 N개 상태 코드
-        var topStatusCodes = calculateTopN(logs.stream()
-                .filter(log -> log.httpStatus() != null)
-                .collect(Collectors.groupingBy(
-                        log -> String.valueOf(log.httpStatus()),
-                        Collectors.counting())));
-        
-        // 상위 N개 IP
-        var topIps = calculateTopN(logs.stream()
-                .filter(log -> log.clientIp() != null)
-                .collect(Collectors.groupingBy(
-                        AccessLog::clientIp,
-                        Collectors.counting())));
-        
-        // HTTP 메서드 통계
-        var methodStats = logs.stream()
-                .filter(log -> log.httpMethod() != null)
-                .collect(Collectors.groupingBy(
-                        AccessLog::httpMethod,
-                        Collectors.counting()));
-        
-        // 평균 응답 시간
-        var avgResponseTime = logs.stream()
-                .filter(log -> log.clientResponseTime() != null)
-                .mapToDouble(AccessLog::clientResponseTime)
-                .average()
-                .orElse(0.0);
-        
-        // 평균 송신 바이트
-        var avgSentBytes = logs.stream()
-                .filter(log -> log.sentBytes() != null)
-                .mapToLong(AccessLog::sentBytes)
-                .average()
-                .orElse(0.0);
-        
-        // 총 트래픽
-        var totalTraffic = logs.stream()
-                .filter(log -> log.sentBytes() != null)
-                .mapToLong(AccessLog::sentBytes)
-                .sum();
-        
+
+        var statusCounts = new HashMap<String, Long>();
+        var pathCounts = new HashMap<String, Long>();
+        var statusCodeCounts = new HashMap<String, Long>();
+        var ipCounts = new HashMap<String, Long>();
+        var methodCounts = new HashMap<String, Long>();
+
+        var responseTimeSum = 0.0;
+        var responseTimeCount = 0;
+        var totalTraffic = 0L;
+        var sentBytesCount = 0;
+
+        for (var log : logs) {
+            statusCounts.merge(log.statusCategory(), 1L, Long::sum);
+
+            if (log.requestUri() != null) {
+                pathCounts.merge(log.requestUri(), 1L, Long::sum);
+            }
+            if (log.httpStatus() != null) {
+                statusCodeCounts.merge(String.valueOf(log.httpStatus()), 1L, Long::sum);
+            }
+            if (log.clientIp() != null) {
+                ipCounts.merge(log.clientIp(), 1L, Long::sum);
+            }
+            if (log.httpMethod() != null) {
+                methodCounts.merge(log.httpMethod(), 1L, Long::sum);
+            }
+            if (log.clientResponseTime() != null) {
+                responseTimeSum += log.clientResponseTime();
+                responseTimeCount++;
+            }
+            if (log.sentBytes() != null) {
+                totalTraffic += log.sentBytes();
+                sentBytesCount++;
+            }
+        }
+
+        var avgResponseTime = (responseTimeCount > 0) ? responseTimeSum / responseTimeCount : 0.0;
+        var avgSentBytes = (sentBytesCount > 0) ? (double) totalTraffic / sentBytesCount : 0.0;
+
         return AnalysisResult.Statistics.builder()
                 .totalRequests(logs.size())
                 .successCount(statusCounts.getOrDefault("2xx", 0L))
                 .redirectCount(statusCounts.getOrDefault("3xx", 0L))
                 .clientErrorCount(statusCounts.getOrDefault("4xx", 0L))
                 .serverErrorCount(statusCounts.getOrDefault("5xx", 0L))
-                .topPaths(topPaths)
-                .topStatusCodes(topStatusCodes)
-                .topIps(topIps)
-                .methodStats(methodStats)
+                .topPaths(calculateTopN(pathCounts))
+                .topStatusCodes(calculateTopN(statusCodeCounts))
+                .topIps(calculateTopN(ipCounts))
+                .methodStats(methodCounts)
                 .avgResponseTime(avgResponseTime)
                 .avgSentBytes(avgSentBytes)
                 .totalTraffic(totalTraffic)
