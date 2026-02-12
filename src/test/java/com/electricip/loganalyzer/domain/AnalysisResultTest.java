@@ -179,6 +179,7 @@ class AnalysisResultTest {
                     null,
                     validStatistics(),
                     mutableMap,
+                    null,
                     null
             );
 
@@ -398,6 +399,7 @@ class AnalysisResultTest {
                     null,
                     validStatistics(),
                     null,
+                    null,
                     null
             );
 
@@ -416,6 +418,7 @@ class AnalysisResultTest {
                     LocalDateTime.now(),
                     null,
                     validStatistics(),
+                    null,
                     null,
                     stats
             );

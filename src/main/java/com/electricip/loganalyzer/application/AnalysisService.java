@@ -7,6 +7,7 @@ import com.electricip.loganalyzer.domain.exception.FileTooLargeException;
 import com.electricip.loganalyzer.domain.exception.InvalidFileException;
 import com.electricip.loganalyzer.domain.exception.LogAnalyzerException;
 import com.electricip.loganalyzer.domain.exception.LogParsingException;
+import com.electricip.loganalyzer.domain.exception.StatisticsCalculationException;
 import com.electricip.loganalyzer.domain.exception.TooManyParsingErrorsException;
 import com.electricip.loganalyzer.infrastructure.client.IpInfoClient;
 import lombok.RequiredArgsConstructor;
@@ -70,22 +71,46 @@ public class AnalysisService {
             }
 
             // 2. 통계 계산
-            var statistics = statisticsCalculator.calculate(logs);
+            AnalysisResult.Statistics statistics;
+            try {
+                statistics = statisticsCalculator.calculate(logs);
+            } catch (Exception e) {
+                throw new StatisticsCalculationException("통계 계산에 실패했습니다", e);
+            }
 
-            // 3. IP enrichment
-            var ipDetails = enrichIpInfo(statistics.topIps());
+            // 3. topIps 조회 (통계 접근 실패 시 StatisticsCalculationException)
+            List<AnalysisResult.TopItem> topIps;
+            try {
+                topIps = statistics.topIps();
+            } catch (Exception e) {
+                throw new StatisticsCalculationException("통계 데이터 접근에 실패했습니다", e);
+            }
 
-            // 4. 결과 생성
+            // 4. IP enrichment (실패해도 결과 반환)
+            var warnings = new ArrayList<String>();
+            Map<String, IpInfo> ipDetails;
+            try {
+                var enrichmentResult = enrichIpInfo(topIps);
+                ipDetails = enrichmentResult.ipDetails();
+                warnings.addAll(enrichmentResult.warnings());
+            } catch (Exception e) {
+                log.warn("IP enrichment 전체 실패, 빈 결과로 대체: {}", e.getMessage(), e);
+                ipDetails = Collections.emptyMap();
+                warnings.add("IP 정보 조회에 실패했습니다: " + e.getMessage());
+            }
+
+            // 5. 결과 생성
             var result = AnalysisResult.builder()
                     .analysisId(UUID.randomUUID().toString())
                     .completedAt(LocalDateTime.now())
                     .processingTimeMs(System.currentTimeMillis() - startTime)
                     .statistics(statistics)
                     .ipDetails(ipDetails)
+                    .warnings(warnings)
                     .parseStatistics(parseResult.parseStatistics())
                     .build();
 
-            // 5. 저장
+            // 6. 저장
             repository.save(result);
 
             log.info("분석 완료: id={}, duration={}ms, total={}",
@@ -207,12 +232,14 @@ public class AnalysisService {
         }
     }
     
+    record IpEnrichmentResult(Map<String, IpInfo> ipDetails, List<String> warnings) {}
+
     /**
      * IP 정보 병렬 enrichment (CompletableFuture + 전용 스레드 풀)
      */
-    private Map<String, IpInfo> enrichIpInfo(List<AnalysisResult.TopItem> topIps) {
+    IpEnrichmentResult enrichIpInfo(List<AnalysisResult.TopItem> topIps) {
         if (topIps.isEmpty()) {
-            return Collections.emptyMap();
+            return new IpEnrichmentResult(Collections.emptyMap(), List.of());
         }
 
         var ips = topIps.stream()
@@ -222,7 +249,7 @@ public class AnalysisService {
                 .toList();
 
         if (ips.isEmpty()) {
-            return Collections.emptyMap();
+            return new IpEnrichmentResult(Collections.emptyMap(), List.of());
         }
 
         var timeout = properties.ipEnrichmentTimeoutSeconds();
@@ -242,12 +269,24 @@ public class AnalysisService {
             log.warn("IP enrichment 중 예외 발생, 완료된 결과만 반환", e);
         }
 
-        return futures.entrySet().stream()
+        var ipDetails = futures.entrySet().stream()
                 .filter(entry -> entry.getValue().isDone() && !entry.getValue().isCompletedExceptionally())
                 .collect(Collectors.toMap(
                         Map.Entry::getKey,
                         entry -> entry.getValue().join()
                 ));
+
+        var failedIps = ipDetails.entrySet().stream()
+                .filter(e -> !e.getValue().isValid())
+                .map(Map.Entry::getKey)
+                .toList();
+
+        var warnings = new ArrayList<String>();
+        if (!failedIps.isEmpty()) {
+            warnings.add("일부 IP 정보 조회에 실패했습니다: " + String.join(", ", failedIps));
+        }
+
+        return new IpEnrichmentResult(ipDetails, warnings);
     }
 
     private IpInfo fetchIpInfoSafely(String ip) {

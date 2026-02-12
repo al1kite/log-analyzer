@@ -2,6 +2,8 @@ package com.electricip.loganalyzer.application;
 
 import com.electricip.loganalyzer.config.LogAnalysisProperties;
 import com.electricip.loganalyzer.domain.*;
+import com.electricip.loganalyzer.domain.exception.InvalidFileException;
+import com.electricip.loganalyzer.domain.exception.StatisticsCalculationException;
 import com.electricip.loganalyzer.infrastructure.client.IpInfoClient;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -12,8 +14,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.multipart.MultipartFile;
-
-import com.electricip.loganalyzer.domain.exception.InvalidFileException;
 
 import java.io.ByteArrayInputStream;
 import java.util.Collections;
@@ -364,6 +364,81 @@ class AnalysisServiceTest {
             service.analyze(file);
 
             assertThat(callCount.get()).isEqualTo(1);
+        }
+    }
+
+    @Nested
+    @DisplayName("Graceful Degradation")
+    class GracefulDegradationTest {
+
+        @Test
+        @DisplayName("IpInfoClient 장애 시 warning 포함 + unknown ipDetails로 결과 반환")
+        void shouldReturnResultWithWarningWhenIpEnrichmentFails() throws Exception {
+            var file = mockFile();
+            var topIps = List.of(
+                    new AnalysisResult.TopItem("1.1.1.1", 100),
+                    new AnalysisResult.TopItem("2.2.2.2", 50));
+
+            when(logParser.parse(any())).thenReturn(createParseResult(2));
+            when(statisticsCalculator.calculate(any())).thenReturn(createStats(topIps));
+            // IpInfoClient가 예외를 던져 실제 외부 장애를 재현
+            when(ipInfoClient.getIpInfo(anyString()))
+                    .thenThrow(new RuntimeException("Connection refused"));
+
+            var result = service.analyze(file);
+
+            assertThat(result).isNotNull();
+            assertThat(result.getStatistics().totalRequests()).isEqualTo(100);
+            // 실패한 IP는 unknown으로 fallback
+            assertThat(result.getIpDetails()).hasSize(2);
+            assertThat(result.getIpDetails().get("1.1.1.1").isValid()).isFalse();
+            assertThat(result.getIpDetails().get("2.2.2.2").isValid()).isFalse();
+            // warnings에 실패 정보 포함
+            assertThat(result.getWarnings()).isNotEmpty();
+            assertThat(result.getWarnings().get(0)).contains("일부 IP 정보 조회에 실패했습니다");
+        }
+
+        @Test
+        @DisplayName("statistics.topIps() 접근 실패 시 StatisticsCalculationException 발생")
+        void shouldThrowStatisticsCalculationExceptionWhenTopIpsAccessFails() throws Exception {
+            var file = mockFile();
+
+            when(logParser.parse(any())).thenReturn(createParseResult(1));
+            var brokenStats = mock(AnalysisResult.Statistics.class);
+            when(brokenStats.topIps()).thenThrow(new RuntimeException("통계 데이터 손상"));
+            when(statisticsCalculator.calculate(any())).thenReturn(brokenStats);
+
+            assertThatThrownBy(() -> service.analyze(file))
+                    .isInstanceOf(StatisticsCalculationException.class)
+                    .hasMessageContaining("통계 데이터 접근에 실패했습니다");
+        }
+
+        @Test
+        @DisplayName("통계 계산 실패 시 StatisticsCalculationException 발생")
+        void shouldThrowStatisticsCalculationExceptionWhenCalculationFails() throws Exception {
+            var file = mockFile();
+
+            when(logParser.parse(any())).thenReturn(createParseResult(1));
+            when(statisticsCalculator.calculate(any()))
+                    .thenThrow(new ArithmeticException("division by zero"));
+
+            assertThatThrownBy(() -> service.analyze(file))
+                    .isInstanceOf(StatisticsCalculationException.class)
+                    .hasMessageContaining("통계 계산에 실패했습니다")
+                    .hasCauseInstanceOf(ArithmeticException.class);
+        }
+
+        @Test
+        @DisplayName("정상 분석 시 warnings가 비어있다")
+        void shouldHaveEmptyWarningsOnSuccess() throws Exception {
+            var file = mockFile();
+
+            when(logParser.parse(any())).thenReturn(createParseResult(1));
+            when(statisticsCalculator.calculate(any())).thenReturn(createStats(List.of()));
+
+            var result = service.analyze(file);
+
+            assertThat(result.getWarnings()).isEmpty();
         }
     }
 }
