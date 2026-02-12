@@ -69,7 +69,7 @@ public class IpInfoClient {
                 if (attempt >= MAX_ATTEMPTS) {
                     circuitBreaker.recordFailure();
                     log.warn("ipinfo API 유효하지 않은 응답: ip={}, attempts={}", ip, MAX_ATTEMPTS);
-                    return result;
+                    return IpInfo.unknown(ip);
                 }
                 log.warn("ipinfo API 유효하지 않은 응답, 재시도: ip={}, attempt={}/{}",
                         ip, attempt, MAX_ATTEMPTS);
@@ -77,7 +77,7 @@ public class IpInfoClient {
                 if (sleep(BACKOFF_MS * attempt)) {
                     log.warn("ipinfo API 재시도 중단 (인터럽트): ip={}", ip);
                     circuitBreaker.recordFailure();
-                    return result;
+                    return IpInfo.unknown(ip);
                 }
 
             } catch (RateLimitExceededException e) {
