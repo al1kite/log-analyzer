@@ -1,7 +1,5 @@
 package com.electricip.loganalyzer.api;
 
-import com.electricip.loganalyzer.api.GlobalExceptionHandler.ErrorResponse;
-import com.electricip.loganalyzer.api.GlobalExceptionHandler.ParsingErrorResponse;
 import com.electricip.loganalyzer.application.AnalysisService;
 import com.electricip.loganalyzer.domain.exception.AnalysisNotFoundException;
 import io.swagger.v3.oas.annotations.Operation;
@@ -21,7 +19,6 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
-import java.util.Objects;
 
 /**
  * 로그 분석 REST API
@@ -56,8 +53,6 @@ public class AnalysisController {
     public ResponseEntity<AnalysisIdResponse> analyze(
             @Parameter(description = "분석할 CSV 로그 파일", required = true)
             @RequestParam("file") @NotNull(message = "파일은 필수입니다") MultipartFile file) {
-        
-        log.info("분석 요청: file={}", file.getOriginalFilename());
         
         var result = analysisService.analyze(file);
         
@@ -118,21 +113,5 @@ public class AnalysisController {
 
         var deleted = analysisService.delete(analysisId);
         return deleted ? ResponseEntity.ok().build() : ResponseEntity.notFound().build();
-    }
-    
-    /**
-     * 분석 ID 응답 (Record)
-     */
-    @Schema(description = "분석 완료 응답")
-    public record AnalysisIdResponse(
-            @Schema(description = "분석 ID", example = "550e8400-e29b-41d4-a716-446655440000")
-            String analysisId,
-            @Schema(description = "결과 메시지", example = "분석이 완료되었습니다")
-            String message) {
-
-        public AnalysisIdResponse {
-            Objects.requireNonNull(analysisId, "analysisId는 null일 수 없습니다");
-            Objects.requireNonNull(message, "message는 null일 수 없습니다");
-        }
     }
 }
