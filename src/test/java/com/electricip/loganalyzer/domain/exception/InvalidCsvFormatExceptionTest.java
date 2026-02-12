@@ -1,6 +1,5 @@
-package com.electricip.loganalyzer.domain;
+package com.electricip.loganalyzer.domain.exception;
 
-import com.electricip.loganalyzer.domain.exception.LogAnalyzerException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;

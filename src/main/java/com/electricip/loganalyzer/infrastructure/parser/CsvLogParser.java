@@ -1,7 +1,8 @@
 package com.electricip.loganalyzer.infrastructure.parser;
 
+import com.electricip.loganalyzer.application.LogParser;
 import com.electricip.loganalyzer.domain.AccessLog;
-import com.electricip.loganalyzer.domain.InvalidCsvFormatException;
+import com.electricip.loganalyzer.domain.exception.InvalidCsvFormatException;
 import com.electricip.loganalyzer.domain.ParseError;
 import com.electricip.loganalyzer.domain.ParseStatistics;
 import com.electricip.loganalyzer.config.LogAnalysisProperties;
@@ -20,6 +21,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * CSV 로그 파서
@@ -27,7 +29,7 @@ import java.util.*;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class CsvLogParser {
+public class CsvLogParser implements LogParser {
 
     private static final DateTimeFormatter FORMATTER =
             DateTimeFormatter.ofPattern("M/d/yyyy, h:mm:ss.SSS a", Locale.ENGLISH);
@@ -133,7 +135,7 @@ public class CsvLogParser {
     private void validateHeaders(Map<String, Integer> headerMap) {
         var actualHeaders = headerMap.keySet().stream()
                 .map(h -> h.toLowerCase(Locale.ROOT))
-                .collect(java.util.stream.Collectors.toSet());
+                .collect(Collectors.toSet());
 
         var missingHeaders = REQUIRED_HEADERS.stream()
                 .filter(required -> !actualHeaders.contains(required.toLowerCase(Locale.ROOT)))
@@ -215,16 +217,4 @@ public class CsvLogParser {
         }
     }
 
-    /**
-     * 파싱 결과 (Record)
-     */
-    public record ParseResult(
-            List<AccessLog> logs,
-            ParseStatistics parseStatistics
-    ) {
-        public ParseResult {
-            logs = List.copyOf(logs);
-            Objects.requireNonNull(parseStatistics, "parseStatistics는 null일 수 없습니다");
-        }
-    }
 }

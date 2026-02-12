@@ -1,6 +1,6 @@
 package com.electricip.loganalyzer.api;
 
-import com.electricip.loganalyzer.domain.InvalidCsvFormatException;
+import com.electricip.loganalyzer.domain.exception.InvalidCsvFormatException;
 import com.electricip.loganalyzer.domain.ParseError;
 import com.electricip.loganalyzer.domain.exception.AnalysisNotFoundException;
 import com.electricip.loganalyzer.domain.exception.DuplicateAnalysisIdException;

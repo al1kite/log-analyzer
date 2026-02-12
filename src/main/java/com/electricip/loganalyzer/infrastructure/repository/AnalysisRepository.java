@@ -1,5 +1,6 @@
 package com.electricip.loganalyzer.infrastructure.repository;
 
+import com.electricip.loganalyzer.application.AnalysisResultRepository;
 import com.electricip.loganalyzer.domain.AnalysisResult;
 import com.electricip.loganalyzer.domain.exception.DuplicateAnalysisIdException;
 import com.github.benmanes.caffeine.cache.Cache;
@@ -19,7 +20,7 @@ import java.util.concurrent.TimeUnit;
  */
 @Slf4j
 @Repository
-public class AnalysisRepository {
+public class AnalysisRepository implements AnalysisResultRepository {
 
     private final Cache<String, AnalysisResult> storage;
 
