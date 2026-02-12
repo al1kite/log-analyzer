@@ -21,7 +21,7 @@ public record LogAnalysisProperties(
         @DefaultValue("10") int topNResults,
         @DefaultValue("50") int maxFileSizeMb,
         @DefaultValue("5") int ipEnrichmentTimeoutSeconds,
-        @DefaultValue("text/csv,text/plain,application/csv,application/vnd.ms-excel")
+        @DefaultValue({"text/csv", "text/plain", "application/csv", "application/vnd.ms-excel"})
         List<String> allowedContentTypes
 ) {
     private static final Set<String> DEFAULT_CONTENT_TYPES = Set.of(
