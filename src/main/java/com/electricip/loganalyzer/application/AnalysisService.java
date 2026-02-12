@@ -17,7 +17,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -103,7 +102,7 @@ public class AnalysisService {
             throw e;
         } catch (Exception e) {
             log.error("분석 실패 (내부 오류): {}", e.getMessage(), e);
-            throw new LogParsingException("로그 분석에 실패했습니다: " + e.getMessage(), e);
+            throw new LogParsingException("로그 분석에 실패했습니다", e);
         }
     }
 
@@ -168,8 +167,13 @@ public class AnalysisService {
     }
 
     private void validateContentType(String contentType) {
-        if (contentType != null && !properties.allowedContentTypeSet().contains(contentType.toLowerCase(Locale.ROOT))) {
-            throw new InvalidFileException("허용되지 않은 파일 타입: " + contentType);
+        if (contentType == null) {
+            return;
+        }
+        // "text/csv; charset=UTF-8" → "text/csv"
+        var baseType = contentType.split(";")[0].trim().toLowerCase(Locale.ROOT);
+        if (!properties.allowedContentTypeSet().contains(baseType)) {
+            throw new InvalidFileException("허용되지 않은 파일 타입: " + baseType);
         }
     }
 
@@ -192,17 +196,16 @@ public class AnalysisService {
                 }
             }
 
-            // 바이너리 파일 감지 (NULL 바이트, 제어 문자)
+            // 바이너리 파일 감지 (NULL 바이트)
             for (int i = 0; i < bytesRead; i++) {
                 byte b = header[i];
                 if (b == 0) {
                     throw new InvalidFileException("바이너리 파일은 업로드할 수 없습니다");
                 }
             }
-        } catch (InvalidFileException e) {
-            throw e;
         } catch (IOException e) {
-            throw new InvalidFileException("파일 읽기 실패: " + e.getMessage());
+            log.warn("파일 콘텐츠 검증 중 읽기 실패", e);
+            throw new InvalidFileException("파일 읽기에 실패했습니다");
         }
     }
     

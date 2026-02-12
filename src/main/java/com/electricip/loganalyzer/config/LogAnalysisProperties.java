@@ -4,6 +4,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 
 /**
@@ -20,12 +21,12 @@ public record LogAnalysisProperties(
         @DefaultValue("10") int topNResults,
         @DefaultValue("50") int maxFileSizeMb,
         @DefaultValue("5") int ipEnrichmentTimeoutSeconds,
-        @DefaultValue("text/csv,text/plain,application/csv,application/vnd.ms-excel,application/octet-stream")
+        @DefaultValue("text/csv,text/plain,application/csv,application/vnd.ms-excel")
         List<String> allowedContentTypes
 ) {
     private static final Set<String> DEFAULT_CONTENT_TYPES = Set.of(
             "text/csv", "text/plain", "application/csv",
-            "application/vnd.ms-excel", "application/octet-stream"
+            "application/vnd.ms-excel"
     );
 
     public LogAnalysisProperties {
@@ -43,6 +44,11 @@ public record LogAnalysisProperties(
         }
         if (allowedContentTypes == null || allowedContentTypes.isEmpty()) {
             allowedContentTypes = List.copyOf(DEFAULT_CONTENT_TYPES);
+        } else {
+            allowedContentTypes = allowedContentTypes.stream()
+                    .filter(t -> t != null && !t.isBlank())
+                    .map(t -> t.trim().toLowerCase(Locale.ROOT))
+                    .toList();
         }
     }
 

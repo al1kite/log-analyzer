@@ -229,9 +229,20 @@ class AnalysisServiceTest {
         }
 
         @Test
-        @DisplayName("null Content-Type은 허용된다")
+        @DisplayName("null Content-Type은 허용된다 (확장자 검증 + 콘텐츠 스니핑으로 충분)")
         void shouldAllowNullContentType() throws Exception {
             var file = mockFile("test.csv", null, "data".getBytes());
+            when(logParser.parse(any())).thenReturn(createParseResult(1));
+            when(statisticsCalculator.calculate(any())).thenReturn(createStats(List.of()));
+
+            var result = service.analyze(file);
+            assertThat(result).isNotNull();
+        }
+
+        @Test
+        @DisplayName("Content-Type에 파라미터가 포함되어도 base type으로 판별된다")
+        void shouldParseContentTypeWithParameters() throws Exception {
+            var file = mockFile("test.csv", "text/csv; charset=UTF-8", "data".getBytes());
             when(logParser.parse(any())).thenReturn(createParseResult(1));
             when(statisticsCalculator.calculate(any())).thenReturn(createStats(List.of()));
 
