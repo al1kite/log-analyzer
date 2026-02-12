@@ -26,6 +26,11 @@ log-analysis:
   top-n-results: 10
   ip-enrichment-timeout-seconds: 5
 
+# Rate Limit 설정
+rate-limit:
+  max-requests-per-minute: 10
+  enabled: true
+
 # 로깅
 logging:
   level:

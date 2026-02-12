@@ -2,6 +2,7 @@ package com.electricip.loganalyzer;
 
 import com.electricip.loganalyzer.config.IpInfoProperties;
 import com.electricip.loganalyzer.config.LogAnalysisProperties;
+import com.electricip.loganalyzer.config.RateLimitProperties;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,12 +24,15 @@ import static org.assertj.core.api.Assertions.assertThat;
         "log-analysis.max-file-size-mb=25",
         "log-analysis.ip-enrichment-timeout-seconds=3",
         "ipinfo.base-url=https://test.ipinfo.io",
-        "ipinfo.token=test-token"
+        "ipinfo.token=test-token",
+        "rate-limit.max-requests-per-minute=20",
+        "rate-limit.enabled=false"
 })
 class ConfigurationPropertiesBindingTest {
 
     @Autowired private LogAnalysisProperties logAnalysisProperties;
     @Autowired private IpInfoProperties ipInfoProperties;
+    @Autowired private RateLimitProperties rateLimitProperties;
 
     @Test
     @DisplayName("LogAnalysisProperties가 @TestPropertySource 값으로 바인딩된다")
@@ -44,5 +48,12 @@ class ConfigurationPropertiesBindingTest {
     void ipInfoProperties_areBound() {
         assertThat(ipInfoProperties.baseUrl()).isEqualTo("https://test.ipinfo.io");
         assertThat(ipInfoProperties.token()).isEqualTo("test-token");
+    }
+
+    @Test
+    @DisplayName("RateLimitProperties가 @TestPropertySource 값으로 바인딩된다")
+    void rateLimitProperties_areBound() {
+        assertThat(rateLimitProperties.maxRequestsPerMinute()).isEqualTo(20);
+        assertThat(rateLimitProperties.enabled()).isFalse();
     }
 }

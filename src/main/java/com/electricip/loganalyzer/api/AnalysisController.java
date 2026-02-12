@@ -1,6 +1,7 @@
 package com.electricip.loganalyzer.api;
 
 import com.electricip.loganalyzer.application.AnalysisService;
+import com.electricip.loganalyzer.application.RateLimitService;
 import com.electricip.loganalyzer.domain.exception.AnalysisNotFoundException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -9,6 +10,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.constraints.NotNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -32,6 +34,7 @@ import java.util.List;
 public class AnalysisController {
     
     private final AnalysisService analysisService;
+    private final RateLimitService rateLimitService;
     
     /**
      * 로그 파일 분석
@@ -47,19 +50,36 @@ public class AnalysisController {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "422", description = "파싱 에러 과다 (유효한 로그 없음)",
                     content = @Content(schema = @Schema(implementation = ParsingErrorResponse.class))),
+            @ApiResponse(responseCode = "429", description = "요청 한도 초과",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "500", description = "서버 내부 오류",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<AnalysisIdResponse> analyze(
             @Parameter(description = "분석할 CSV 로그 파일", required = true)
-            @RequestParam("file") @NotNull(message = "파일은 필수입니다") MultipartFile file) {
-        
+            @RequestParam("file") @NotNull(message = "파일은 필수입니다") MultipartFile file,
+            HttpServletRequest request) {
+
+        String clientIp = getClientIp(request);
+        rateLimitService.checkRateLimit(clientIp);
+
         var result = analysisService.analyze(file);
-        
-        return ResponseEntity.ok(new AnalysisIdResponse(
-                result.getAnalysisId(),
-                "분석이 완료되었습니다"
-        ));
+
+        return ResponseEntity.ok()
+                .header("X-RateLimit-Remaining",
+                        String.valueOf(rateLimitService.getRemainingRequests(clientIp)))
+                .body(new AnalysisIdResponse(
+                        result.getAnalysisId(),
+                        "분석이 완료되었습니다"
+                ));
+    }
+
+    private String getClientIp(HttpServletRequest request) {
+        String xForwardedFor = request.getHeader("X-Forwarded-For");
+        if (xForwardedFor != null && !xForwardedFor.isBlank()) {
+            return xForwardedFor.split(",")[0].trim();
+        }
+        return request.getRemoteAddr();
     }
     
     /**

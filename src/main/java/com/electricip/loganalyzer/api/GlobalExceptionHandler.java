@@ -1,5 +1,6 @@
 package com.electricip.loganalyzer.api;
 
+import com.electricip.loganalyzer.domain.exception.ApiRateLimitExceededException;
 import com.electricip.loganalyzer.domain.exception.InvalidCsvFormatException;
 import com.electricip.loganalyzer.domain.exception.AnalysisNotFoundException;
 import com.electricip.loganalyzer.domain.exception.DuplicateAnalysisIdException;
@@ -182,6 +183,26 @@ public class GlobalExceptionHandler {
                 .status(HttpStatus.CONFLICT)
                 .body(ErrorResponse.of(
                         HttpStatus.CONFLICT,
+                        e.getErrorCode(),
+                        e.getMessage(),
+                        request.getRequestURI()
+                ));
+    }
+
+    /**
+     * ApiRateLimitExceededException 처리 → 429 + Retry-After
+     */
+    @ExceptionHandler(ApiRateLimitExceededException.class)
+    public ResponseEntity<ErrorResponse> handleApiRateLimitExceeded(
+            ApiRateLimitExceededException e, HttpServletRequest request) {
+
+        log.error("API rate limit 초과: {}", e.getMessage());
+
+        return ResponseEntity
+                .status(HttpStatus.TOO_MANY_REQUESTS)
+                .header("Retry-After", "60")
+                .body(ErrorResponse.of(
+                        HttpStatus.TOO_MANY_REQUESTS,
                         e.getErrorCode(),
                         e.getMessage(),
                         request.getRequestURI()
