@@ -5,6 +5,7 @@ import com.electricip.loganalyzer.application.RateLimitService;
 import com.electricip.loganalyzer.domain.exception.AnalysisNotFoundException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.headers.Header;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -19,6 +20,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 import java.util.List;
 
@@ -32,17 +34,18 @@ import java.util.List;
 @Validated
 @Tag(name = "Log Analysis", description = "로그 분석 API")
 public class AnalysisController {
-    
+
     private final AnalysisService analysisService;
     private final RateLimitService rateLimitService;
-    
+
     /**
      * 로그 파일 분석
      */
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(summary = "로그 파일 분석", description = "CSV 로그 파일을 업로드하여 분석합니다")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "분석 성공",
+            @ApiResponse(responseCode = "201", description = "분석 성공",
+                    headers = @Header(name = "Location", description = "생성된 분석 결과 URI"),
                     content = @Content(schema = @Schema(implementation = AnalysisIdResponse.class))),
             @ApiResponse(responseCode = "400", description = "유효하지 않은 파일 또는 CSV 형식 오류",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
@@ -65,7 +68,12 @@ public class AnalysisController {
 
         var result = analysisService.analyze(file);
 
-        return ResponseEntity.ok()
+        var location = ServletUriComponentsBuilder.fromCurrentRequest()
+                .path("/{id}")
+                .buildAndExpand(result.getAnalysisId())
+                .toUri();
+
+        return ResponseEntity.created(location)
                 .header("X-RateLimit-Remaining",
                         String.valueOf(rateLimitService.getRemainingRequests(clientIp)))
                 .body(new AnalysisIdResponse(
@@ -73,7 +81,7 @@ public class AnalysisController {
                         "분석이 완료되었습니다"
                 ));
     }
-    
+
     /**
      * 분석 결과 조회
      */
@@ -102,21 +110,21 @@ public class AnalysisController {
     @Operation(summary = "전체 결과 조회", description = "모든 분석 결과를 조회합니다")
     @ApiResponse(responseCode = "200", description = "조회 성공")
     public ResponseEntity<List<AnalysisResponse>> getAllResults() {
-        
+
         var results = analysisService.getAll().stream()
                 .map(AnalysisResponse::from)
                 .toList();
-        
+
         return ResponseEntity.ok(results);
     }
-    
+
     /**
      * 결과 삭제
      */
     @DeleteMapping("/{analysisId}")
     @Operation(summary = "결과 삭제", description = "분석 결과를 삭제합니다")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "삭제 성공"),
+            @ApiResponse(responseCode = "204", description = "삭제 성공"),
             @ApiResponse(responseCode = "404", description = "분석 결과를 찾을 수 없음")
     })
     public ResponseEntity<Void> deleteResult(
@@ -124,6 +132,24 @@ public class AnalysisController {
             @PathVariable String analysisId) {
 
         var deleted = analysisService.delete(analysisId);
-        return deleted ? ResponseEntity.ok().build() : ResponseEntity.notFound().build();
+        return deleted ? ResponseEntity.noContent().build() : ResponseEntity.notFound().build();
+    }
+
+    /**
+     * 지원 메서드 조회
+     */
+    @RequestMapping(method = RequestMethod.OPTIONS)
+    @Operation(summary = "지원 메서드 조회", description = "이 엔드포인트가 지원하는 HTTP 메서드를 반환합니다")
+    @ApiResponse(responseCode = "200", description = "지원 메서드 목록",
+            headers = @Header(name = "Allow", description = "지원하는 HTTP 메서드"))
+    public ResponseEntity<Void> options() {
+        return ResponseEntity.ok()
+                .allow(
+                        org.springframework.http.HttpMethod.GET,
+                        org.springframework.http.HttpMethod.POST,
+                        org.springframework.http.HttpMethod.DELETE,
+                        org.springframework.http.HttpMethod.OPTIONS
+                )
+                .build();
     }
 }
