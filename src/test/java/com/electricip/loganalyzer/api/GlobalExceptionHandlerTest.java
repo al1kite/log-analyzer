@@ -1,5 +1,6 @@
 package com.electricip.loganalyzer.api;
 
+import com.electricip.loganalyzer.domain.exception.ApiRateLimitExceededException;
 import com.electricip.loganalyzer.domain.exception.InvalidCsvFormatException;
 import com.electricip.loganalyzer.domain.ParseError;
 import com.electricip.loganalyzer.domain.exception.AnalysisNotFoundException;
@@ -185,7 +186,25 @@ class GlobalExceptionHandlerTest {
     }
 
     @Nested
-    @DisplayName("RateLimitExceededException 핸들러")
+    @DisplayName("ApiRateLimitExceededException 핸들러")
+    class ApiRateLimitTest {
+
+        @Test
+        @DisplayName("429 Too Many Requests로 응답하며 Retry-After 헤더를 포함한다")
+        void shouldReturn429WithRetryAfter() {
+            var ex = new ApiRateLimitExceededException("요청 한도 초과", 60);
+
+            var response = handler.handleApiRateLimitExceeded(ex, request);
+
+            assertThat(response.getStatusCode()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
+            assertThat(response.getBody()).isNotNull();
+            assertThat(response.getBody().errorCode()).isEqualTo("API_RATE_LIMIT_EXCEEDED");
+            assertThat(response.getHeaders().getFirst("Retry-After")).isEqualTo("60");
+        }
+    }
+
+    @Nested
+    @DisplayName("RateLimitExceededException 핸들러 (ipinfo)")
     class RateLimitTest {
 
         @Test
