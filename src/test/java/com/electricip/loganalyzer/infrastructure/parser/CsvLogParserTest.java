@@ -1,7 +1,8 @@
 package com.electricip.loganalyzer.infrastructure.parser;
 
+import com.electricip.loganalyzer.application.LogParser;
 import com.electricip.loganalyzer.config.LogAnalysisProperties;
-import com.electricip.loganalyzer.domain.InvalidCsvFormatException;
+import com.electricip.loganalyzer.domain.exception.InvalidCsvFormatException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -154,7 +155,7 @@ class CsvLogParserTest {
             int threadCount = 10;
             var executor = Executors.newFixedThreadPool(threadCount);
             var latch = new CountDownLatch(threadCount);
-            var tasks = new ArrayList<Future<CsvLogParser.ParseResult>>();
+            var tasks = new ArrayList<Future<LogParser.ParseResult>>();
 
             for (int i = 0; i < threadCount; i++) {
                 tasks.add(executor.submit(() -> {
@@ -184,7 +185,7 @@ class CsvLogParserTest {
             int threadCount = 10;
             var executor = Executors.newFixedThreadPool(threadCount);
             var latch = new CountDownLatch(threadCount);
-            var tasks = new ArrayList<Future<CsvLogParser.ParseResult>>();
+            var tasks = new ArrayList<Future<LogParser.ParseResult>>();
 
             for (int i = 0; i < threadCount; i++) {
                 final int rowCount = i + 1; // 각 스레드가 다른 행 수

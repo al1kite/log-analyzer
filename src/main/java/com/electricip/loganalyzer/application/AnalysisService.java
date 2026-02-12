@@ -9,8 +9,6 @@ import com.electricip.loganalyzer.domain.exception.LogAnalyzerException;
 import com.electricip.loganalyzer.domain.exception.LogParsingException;
 import com.electricip.loganalyzer.domain.exception.TooManyParsingErrorsException;
 import com.electricip.loganalyzer.infrastructure.client.IpInfoClient;
-import com.electricip.loganalyzer.infrastructure.parser.CsvLogParser;
-import com.electricip.loganalyzer.infrastructure.repository.AnalysisRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -32,9 +30,9 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class AnalysisService {
 
-    private final CsvLogParser logParser;
+    private final LogParser logParser;
     private final IpInfoClient ipInfoClient;
-    private final AnalysisRepository repository;
+    private final AnalysisResultRepository repository;
     private final StatisticsCalculator statisticsCalculator;
     private final LogAnalysisProperties properties;
     private final Executor ipEnrichmentExecutor;

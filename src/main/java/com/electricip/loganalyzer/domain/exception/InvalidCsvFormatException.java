@@ -1,6 +1,5 @@
-package com.electricip.loganalyzer.domain;
+package com.electricip.loganalyzer.domain.exception;
 
-import com.electricip.loganalyzer.domain.exception.LogAnalyzerException;
 import lombok.Getter;
 
 import java.util.List;

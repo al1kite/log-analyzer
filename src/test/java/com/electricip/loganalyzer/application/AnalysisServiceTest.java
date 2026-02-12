@@ -3,8 +3,6 @@ package com.electricip.loganalyzer.application;
 import com.electricip.loganalyzer.config.LogAnalysisProperties;
 import com.electricip.loganalyzer.domain.*;
 import com.electricip.loganalyzer.infrastructure.client.IpInfoClient;
-import com.electricip.loganalyzer.infrastructure.parser.CsvLogParser;
-import com.electricip.loganalyzer.infrastructure.repository.AnalysisRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -36,9 +34,9 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class AnalysisServiceTest {
 
-    @Mock private CsvLogParser logParser;
+    @Mock private LogParser logParser;
     @Mock private IpInfoClient ipInfoClient;
-    @Mock private AnalysisRepository repository;
+    @Mock private AnalysisResultRepository repository;
     @Mock private StatisticsCalculator statisticsCalculator;
 
     private AnalysisService service;
@@ -58,11 +56,11 @@ class AnalysisServiceTest {
         executor.close();
     }
 
-    private CsvLogParser.ParseResult createParseResult(int logCount) {
+    private LogParser.ParseResult createParseResult(int logCount) {
         var logs = Collections.nCopies(logCount, new AccessLog(
                 null, "1.1.1.1", "GET", "/api/test", "Mozilla",
                 200, "HTTP/1.1", 100L, 200L, 0.5, "TLSv1.2", "/api/test"));
-        return new CsvLogParser.ParseResult(logs,
+        return new LogParser.ParseResult(logs,
                 new ParseStatistics(logCount, logCount, 0, Map.of(), List.of()));
     }
 
