@@ -30,6 +30,7 @@ log-analysis:
 rate-limit:
   max-requests-per-minute: 10
   enabled: true
+  window-seconds: 60
 
 # 로깅
 logging:

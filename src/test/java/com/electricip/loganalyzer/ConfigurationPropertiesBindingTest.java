@@ -26,7 +26,8 @@ import static org.assertj.core.api.Assertions.assertThat;
         "ipinfo.base-url=https://test.ipinfo.io",
         "ipinfo.token=test-token",
         "rate-limit.max-requests-per-minute=20",
-        "rate-limit.enabled=false"
+        "rate-limit.enabled=false",
+        "rate-limit.window-seconds=30"
 })
 class ConfigurationPropertiesBindingTest {
 
@@ -55,5 +56,6 @@ class ConfigurationPropertiesBindingTest {
     void rateLimitProperties_areBound() {
         assertThat(rateLimitProperties.maxRequestsPerMinute()).isEqualTo(20);
         assertThat(rateLimitProperties.enabled()).isFalse();
+        assertThat(rateLimitProperties.windowSeconds()).isEqualTo(30);
     }
 }

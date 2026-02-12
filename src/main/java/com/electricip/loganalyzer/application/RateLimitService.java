@@ -7,13 +7,16 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * IP별 분당 요청 수를 제한하는 서비스
+ * IP별 요청 수를 제한하는 서비스
  */
 @Component
 public class RateLimitService {
+
+    private static final int MAX_TRACKED_IPS = 10_000;
 
     private final RateLimitProperties properties;
     private final Cache<String, AtomicInteger> requestCounts;
@@ -21,7 +24,8 @@ public class RateLimitService {
     public RateLimitService(RateLimitProperties properties) {
         this.properties = properties;
         this.requestCounts = Caffeine.newBuilder()
-                .expireAfterWrite(Duration.ofMinutes(1))
+                .expireAfterWrite(Duration.ofSeconds(properties.windowSeconds()))
+                .maximumSize(MAX_TRACKED_IPS)
                 .build();
     }
 
@@ -30,6 +34,8 @@ public class RateLimitService {
      * 한도 초과 시 {@link ApiRateLimitExceededException}을 던진다.
      */
     public void checkRateLimit(String clientIp) {
+        Objects.requireNonNull(clientIp, "clientIp는 null일 수 없습니다");
+
         if (!properties.enabled()) {
             return;
         }
@@ -39,8 +45,9 @@ public class RateLimitService {
 
         if (current > properties.maxRequestsPerMinute()) {
             throw new ApiRateLimitExceededException(
-                    String.format("IP %s의 요청이 분당 %d회 한도를 초과했습니다",
-                            clientIp, properties.maxRequestsPerMinute()));
+                    String.format("IP %s의 요청이 %d초 내 %d회 한도를 초과했습니다",
+                            clientIp, properties.windowSeconds(), properties.maxRequestsPerMinute()),
+                    properties.windowSeconds());
         }
     }
 
@@ -48,6 +55,8 @@ public class RateLimitService {
      * 해당 IP의 잔여 요청 수를 반환한다.
      */
     public int getRemainingRequests(String clientIp) {
+        Objects.requireNonNull(clientIp, "clientIp는 null일 수 없습니다");
+
         if (!properties.enabled()) {
             return properties.maxRequestsPerMinute();
         }

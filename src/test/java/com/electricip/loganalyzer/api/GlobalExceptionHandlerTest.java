@@ -192,7 +192,7 @@ class GlobalExceptionHandlerTest {
         @Test
         @DisplayName("429 Too Many Requests로 응답하며 Retry-After 헤더를 포함한다")
         void shouldReturn429WithRetryAfter() {
-            var ex = new ApiRateLimitExceededException("요청 한도 초과");
+            var ex = new ApiRateLimitExceededException("요청 한도 초과", 60);
 
             var response = handler.handleApiRateLimitExceeded(ex, request);
 

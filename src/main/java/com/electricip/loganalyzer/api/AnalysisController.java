@@ -60,7 +60,7 @@ public class AnalysisController {
             @RequestParam("file") @NotNull(message = "파일은 필수입니다") MultipartFile file,
             HttpServletRequest request) {
 
-        String clientIp = getClientIp(request);
+        String clientIp = request.getRemoteAddr();
         rateLimitService.checkRateLimit(clientIp);
 
         var result = analysisService.analyze(file);
@@ -72,14 +72,6 @@ public class AnalysisController {
                         result.getAnalysisId(),
                         "분석이 완료되었습니다"
                 ));
-    }
-
-    private String getClientIp(HttpServletRequest request) {
-        String xForwardedFor = request.getHeader("X-Forwarded-For");
-        if (xForwardedFor != null && !xForwardedFor.isBlank()) {
-            return xForwardedFor.split(",")[0].trim();
-        }
-        return request.getRemoteAddr();
     }
     
     /**

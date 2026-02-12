@@ -16,6 +16,16 @@ class RateLimitServiceTest {
     class CheckRateLimit {
 
         @Test
+        @DisplayName("clientIp가 null이면 NullPointerException이 발생한다")
+        void shouldRejectNullClientIp() {
+            var service = createService(5, true);
+
+            assertThatThrownBy(() -> service.checkRateLimit(null))
+                    .isInstanceOf(NullPointerException.class)
+                    .hasMessageContaining("clientIp");
+        }
+
+        @Test
         @DisplayName("한도 내 요청은 정상 통과한다")
         void shouldPassWithinLimit() {
             var service = createService(5, true);
@@ -36,7 +46,10 @@ class RateLimitServiceTest {
 
             assertThatThrownBy(() -> service.checkRateLimit("192.168.1.1"))
                     .isInstanceOf(ApiRateLimitExceededException.class)
-                    .hasMessageContaining("한도를 초과");
+                    .hasMessageContaining("한도를 초과")
+                    .satisfies(ex -> assertThat(
+                            ((ApiRateLimitExceededException) ex).getRetryAfterSeconds())
+                            .isEqualTo(60));
         }
 
         @Test
@@ -117,6 +130,6 @@ class RateLimitServiceTest {
     }
 
     private RateLimitService createService(int maxRequests, boolean enabled) {
-        return new RateLimitService(new RateLimitProperties(maxRequests, enabled));
+        return new RateLimitService(new RateLimitProperties(maxRequests, enabled, 60));
     }
 }
