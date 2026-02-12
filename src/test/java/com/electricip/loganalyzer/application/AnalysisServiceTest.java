@@ -372,38 +372,45 @@ class AnalysisServiceTest {
     class GracefulDegradationTest {
 
         @Test
-        @DisplayName("IP enrichment 외부 단계 실패 시 warning 포함 + 빈 ipDetails로 결과 반환")
+        @DisplayName("IpInfoClient 장애 시 warning 포함 + unknown ipDetails로 결과 반환")
         void shouldReturnResultWithWarningWhenIpEnrichmentFails() throws Exception {
             var file = mockFile();
-            // null item을 포함하면 topIps.stream().map(TopItem::item)에서 NPE 발생 → enrichIpInfo 전체 실패
-            // 대신 statisticsCalculator가 topIps에서 NPE를 유발하는 statistics를 반환하도록 구성
-            var normalStats = createStats(List.of(new AnalysisResult.TopItem("1.1.1.1", 100)));
+            var topIps = List.of(
+                    new AnalysisResult.TopItem("1.1.1.1", 100),
+                    new AnalysisResult.TopItem("2.2.2.2", 50));
 
-            when(logParser.parse(any())).thenReturn(createParseResult(1));
-            // statistics.topIps()가 null을 반환하는 mock Statistics를 사용하여 enrichIpInfo에서 NPE 유발
-            var brokenStats = mock(AnalysisResult.Statistics.class);
-            lenient().when(brokenStats.totalRequests()).thenReturn(100L);
-            when(brokenStats.topIps()).thenThrow(new RuntimeException("IP 목록 조회 실패"));
-            lenient().when(brokenStats.successCount()).thenReturn(90L);
-            lenient().when(brokenStats.redirectCount()).thenReturn(5L);
-            lenient().when(brokenStats.clientErrorCount()).thenReturn(3L);
-            lenient().when(brokenStats.serverErrorCount()).thenReturn(2L);
-            lenient().when(brokenStats.topPaths()).thenReturn(List.of());
-            lenient().when(brokenStats.topStatusCodes()).thenReturn(List.of());
-            lenient().when(brokenStats.methodStats()).thenReturn(Map.of());
-            lenient().when(brokenStats.avgResponseTime()).thenReturn(0.5);
-            lenient().when(brokenStats.avgSentBytes()).thenReturn(200.0);
-            lenient().when(brokenStats.totalTraffic()).thenReturn(20000L);
-
-            when(statisticsCalculator.calculate(any())).thenReturn(brokenStats);
+            when(logParser.parse(any())).thenReturn(createParseResult(2));
+            when(statisticsCalculator.calculate(any())).thenReturn(createStats(topIps));
+            // IpInfoClient가 예외를 던져 실제 외부 장애를 재현
+            when(ipInfoClient.getIpInfo(anyString()))
+                    .thenThrow(new RuntimeException("Connection refused"));
 
             var result = service.analyze(file);
 
             assertThat(result).isNotNull();
             assertThat(result.getStatistics().totalRequests()).isEqualTo(100);
-            assertThat(result.getIpDetails()).isEmpty();
+            // 실패한 IP는 unknown으로 fallback
+            assertThat(result.getIpDetails()).hasSize(2);
+            assertThat(result.getIpDetails().get("1.1.1.1").isValid()).isFalse();
+            assertThat(result.getIpDetails().get("2.2.2.2").isValid()).isFalse();
+            // warnings에 실패 정보 포함
             assertThat(result.getWarnings()).isNotEmpty();
-            assertThat(result.getWarnings().get(0)).contains("IP 정보 조회에 실패했습니다");
+            assertThat(result.getWarnings().get(0)).contains("일부 IP 정보 조회에 실패했습니다");
+        }
+
+        @Test
+        @DisplayName("statistics.topIps() 접근 실패 시 StatisticsCalculationException 발생")
+        void shouldThrowStatisticsCalculationExceptionWhenTopIpsAccessFails() throws Exception {
+            var file = mockFile();
+
+            when(logParser.parse(any())).thenReturn(createParseResult(1));
+            var brokenStats = mock(AnalysisResult.Statistics.class);
+            when(brokenStats.topIps()).thenThrow(new RuntimeException("통계 데이터 손상"));
+            when(statisticsCalculator.calculate(any())).thenReturn(brokenStats);
+
+            assertThatThrownBy(() -> service.analyze(file))
+                    .isInstanceOf(StatisticsCalculationException.class)
+                    .hasMessageContaining("통계 데이터 접근에 실패했습니다");
         }
 
         @Test
