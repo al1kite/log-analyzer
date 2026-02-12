@@ -3,6 +3,7 @@ package com.electricip.loganalyzer.domain;
 import lombok.*;
 
 import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -20,6 +21,8 @@ public class AnalysisResult {
     @Singular("ipDetail")
     Map<String, IpInfo> ipDetails;
 
+    List<String> warnings;
+
     ParseStatistics parseStatistics;
 
     /**
@@ -31,6 +34,7 @@ public class AnalysisResult {
             Long processingTimeMs,
             @NonNull Statistics statistics,
             Map<String, IpInfo> ipDetails,
+            List<String> warnings,
             ParseStatistics parseStatistics
     ) {
         this.analysisId = analysisId;
@@ -39,6 +43,7 @@ public class AnalysisResult {
         this.statistics = statistics;
 
         this.ipDetails = (ipDetails == null) ? Map.of() : Map.copyOf(ipDetails);
+        this.warnings = (warnings == null) ? Collections.emptyList() : List.copyOf(warnings);
 
         // 기본값 보장
         this.parseStatistics = (parseStatistics == null) ? ParseStatistics.empty() : parseStatistics;

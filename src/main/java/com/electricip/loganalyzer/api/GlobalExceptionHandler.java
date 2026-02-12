@@ -7,6 +7,7 @@ import com.electricip.loganalyzer.domain.exception.FileTooLargeException;
 import com.electricip.loganalyzer.domain.exception.InvalidFileException;
 import com.electricip.loganalyzer.domain.exception.LogAnalyzerException;
 import com.electricip.loganalyzer.domain.exception.LogParsingException;
+import com.electricip.loganalyzer.domain.exception.StatisticsCalculationException;
 import com.electricip.loganalyzer.domain.exception.TooManyParsingErrorsException;
 import com.electricip.loganalyzer.infrastructure.client.IpInfoException;
 import com.electricip.loganalyzer.infrastructure.client.RateLimitExceededException;
@@ -98,6 +99,25 @@ public class GlobalExceptionHandler {
                 .badRequest()
                 .body(ErrorResponse.of(
                         HttpStatus.BAD_REQUEST,
+                        e.getErrorCode(),
+                        e.getMessage(),
+                        request.getRequestURI()
+                ));
+    }
+
+    /**
+     * StatisticsCalculationException 처리 → 500
+     */
+    @ExceptionHandler(StatisticsCalculationException.class)
+    public ResponseEntity<ErrorResponse> handleStatisticsCalculation(
+            StatisticsCalculationException e, HttpServletRequest request) {
+
+        log.error("통계 계산 오류: {}", e.getMessage(), e);
+
+        return ResponseEntity
+                .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(ErrorResponse.of(
+                        HttpStatus.INTERNAL_SERVER_ERROR,
                         e.getErrorCode(),
                         e.getMessage(),
                         request.getRequestURI()

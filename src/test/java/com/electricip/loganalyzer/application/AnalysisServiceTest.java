@@ -2,6 +2,8 @@ package com.electricip.loganalyzer.application;
 
 import com.electricip.loganalyzer.config.LogAnalysisProperties;
 import com.electricip.loganalyzer.domain.*;
+import com.electricip.loganalyzer.domain.exception.InvalidFileException;
+import com.electricip.loganalyzer.domain.exception.StatisticsCalculationException;
 import com.electricip.loganalyzer.infrastructure.client.IpInfoClient;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -12,8 +14,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.multipart.MultipartFile;
-
-import com.electricip.loganalyzer.domain.exception.InvalidFileException;
 
 import java.io.ByteArrayInputStream;
 import java.util.Collections;
@@ -364,6 +364,74 @@ class AnalysisServiceTest {
             service.analyze(file);
 
             assertThat(callCount.get()).isEqualTo(1);
+        }
+    }
+
+    @Nested
+    @DisplayName("Graceful Degradation")
+    class GracefulDegradationTest {
+
+        @Test
+        @DisplayName("IP enrichment 외부 단계 실패 시 warning 포함 + 빈 ipDetails로 결과 반환")
+        void shouldReturnResultWithWarningWhenIpEnrichmentFails() throws Exception {
+            var file = mockFile();
+            // null item을 포함하면 topIps.stream().map(TopItem::item)에서 NPE 발생 → enrichIpInfo 전체 실패
+            // 대신 statisticsCalculator가 topIps에서 NPE를 유발하는 statistics를 반환하도록 구성
+            var normalStats = createStats(List.of(new AnalysisResult.TopItem("1.1.1.1", 100)));
+
+            when(logParser.parse(any())).thenReturn(createParseResult(1));
+            // statistics.topIps()가 null을 반환하는 mock Statistics를 사용하여 enrichIpInfo에서 NPE 유발
+            var brokenStats = mock(AnalysisResult.Statistics.class);
+            lenient().when(brokenStats.totalRequests()).thenReturn(100L);
+            when(brokenStats.topIps()).thenThrow(new RuntimeException("IP 목록 조회 실패"));
+            lenient().when(brokenStats.successCount()).thenReturn(90L);
+            lenient().when(brokenStats.redirectCount()).thenReturn(5L);
+            lenient().when(brokenStats.clientErrorCount()).thenReturn(3L);
+            lenient().when(brokenStats.serverErrorCount()).thenReturn(2L);
+            lenient().when(brokenStats.topPaths()).thenReturn(List.of());
+            lenient().when(brokenStats.topStatusCodes()).thenReturn(List.of());
+            lenient().when(brokenStats.methodStats()).thenReturn(Map.of());
+            lenient().when(brokenStats.avgResponseTime()).thenReturn(0.5);
+            lenient().when(brokenStats.avgSentBytes()).thenReturn(200.0);
+            lenient().when(brokenStats.totalTraffic()).thenReturn(20000L);
+
+            when(statisticsCalculator.calculate(any())).thenReturn(brokenStats);
+
+            var result = service.analyze(file);
+
+            assertThat(result).isNotNull();
+            assertThat(result.getStatistics().totalRequests()).isEqualTo(100);
+            assertThat(result.getIpDetails()).isEmpty();
+            assertThat(result.getWarnings()).isNotEmpty();
+            assertThat(result.getWarnings().get(0)).contains("IP 정보 조회에 실패했습니다");
+        }
+
+        @Test
+        @DisplayName("통계 계산 실패 시 StatisticsCalculationException 발생")
+        void shouldThrowStatisticsCalculationExceptionWhenCalculationFails() throws Exception {
+            var file = mockFile();
+
+            when(logParser.parse(any())).thenReturn(createParseResult(1));
+            when(statisticsCalculator.calculate(any()))
+                    .thenThrow(new ArithmeticException("division by zero"));
+
+            assertThatThrownBy(() -> service.analyze(file))
+                    .isInstanceOf(StatisticsCalculationException.class)
+                    .hasMessageContaining("통계 계산에 실패했습니다")
+                    .hasCauseInstanceOf(ArithmeticException.class);
+        }
+
+        @Test
+        @DisplayName("정상 분석 시 warnings가 비어있다")
+        void shouldHaveEmptyWarningsOnSuccess() throws Exception {
+            var file = mockFile();
+
+            when(logParser.parse(any())).thenReturn(createParseResult(1));
+            when(statisticsCalculator.calculate(any())).thenReturn(createStats(List.of()));
+
+            var result = service.analyze(file);
+
+            assertThat(result.getWarnings()).isEmpty();
         }
     }
 }

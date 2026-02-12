@@ -7,6 +7,7 @@ import com.electricip.loganalyzer.domain.exception.FileTooLargeException;
 import com.electricip.loganalyzer.domain.exception.InvalidFileException;
 import com.electricip.loganalyzer.domain.exception.LogAnalyzerException;
 import com.electricip.loganalyzer.domain.exception.LogParsingException;
+import com.electricip.loganalyzer.domain.exception.StatisticsCalculationException;
 import com.electricip.loganalyzer.domain.exception.TooManyParsingErrorsException;
 import com.electricip.loganalyzer.infrastructure.client.IpInfoClient;
 import lombok.RequiredArgsConstructor;
@@ -70,10 +71,23 @@ public class AnalysisService {
             }
 
             // 2. 통계 계산
-            var statistics = statisticsCalculator.calculate(logs);
+            AnalysisResult.Statistics statistics;
+            try {
+                statistics = statisticsCalculator.calculate(logs);
+            } catch (Exception e) {
+                throw new StatisticsCalculationException("통계 계산에 실패했습니다", e);
+            }
 
-            // 3. IP enrichment
-            var ipDetails = enrichIpInfo(statistics.topIps());
+            // 3. IP enrichment (실패해도 결과 반환)
+            var warnings = new ArrayList<String>();
+            Map<String, IpInfo> ipDetails;
+            try {
+                ipDetails = enrichIpInfo(statistics.topIps());
+            } catch (Exception e) {
+                log.warn("IP enrichment 전체 실패, 빈 결과로 대체: {}", e.getMessage(), e);
+                ipDetails = Collections.emptyMap();
+                warnings.add("IP 정보 조회에 실패했습니다: " + e.getMessage());
+            }
 
             // 4. 결과 생성
             var result = AnalysisResult.builder()
@@ -82,6 +96,7 @@ public class AnalysisService {
                     .processingTimeMs(System.currentTimeMillis() - startTime)
                     .statistics(statistics)
                     .ipDetails(ipDetails)
+                    .warnings(warnings)
                     .parseStatistics(parseResult.parseStatistics())
                     .build();
 

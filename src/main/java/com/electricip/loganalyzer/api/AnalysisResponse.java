@@ -28,11 +28,14 @@ public record AnalysisResponse(
         @NonNull TopStats topStats,
         @NonNull List<IpDetail> ipDetails,
         @NonNull ParseStatisticsDto parseStatistics,
-        @NonNull AdditionalStats additionalStats
+        @NonNull AdditionalStats additionalStats,
+        @Schema(description = "경고 메시지 목록")
+        @NonNull List<String> warnings
 ) {
 
     public AnalysisResponse {
         ipDetails = List.copyOf(ipDetails);
+        warnings = List.copyOf(warnings);
     }
 
     /**
@@ -68,6 +71,7 @@ public record AnalysisResponse(
                         stats.avgResponseTime(),
                         stats.avgSentBytes(),
                         stats.totalTraffic()))
+                .warnings(result.getWarnings())
                 .build();
     }
 

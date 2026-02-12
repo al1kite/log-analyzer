@@ -39,6 +39,7 @@ class AnalysisResponseTest {
                 .ipDetails(Collections.emptyList())
                 .parseStatistics(validParseStatistics())
                 .additionalStats(validAdditionalStats())
+                .warnings(Collections.emptyList())
                 .build();
 
         assertEquals("test-id", response.analysisId());
@@ -99,6 +100,7 @@ class AnalysisResponseTest {
                 .ipDetails(Collections.emptyList())
                 .parseStatistics(validParseStatistics())
                 .additionalStats(validAdditionalStats())
+                .warnings(Collections.emptyList())
                 .build();
 
         assertNull(response.processingTimeMs());
